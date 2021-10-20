@@ -1,3 +1,11 @@
+/*
+ * @Descripttion: 
+ * @version: 
+ * @Author: Lonya Peng
+ * @Date: 2021-10-15 15:41:21
+ * @LastEditors: Lonya Peng
+ * @LastEditTime: 2021-10-15 17:20:14
+ */
 #pragma once
 
 #include <cstdio>
@@ -51,7 +59,7 @@ class FeatureTracker
     cv::Mat fisheye_mask;
     //cur_img和forw_img分别为光流跟踪的前后两帧
     //prev_img是上一次发布的帧，用处是，光流跟踪后用prev_img和forw_img根据rejectWithF()提出outlier
-    cv::Mat prev_img, cur_img, forw_img;
+    cv::Mat prev_img, cur_img, forw_img,flow,cflow;
     //每一帧中新提取的特征点
     vector<cv::Point2f> n_pts;
     //对应的图像特征点
