@@ -1,7 +1,7 @@
 #include "feature_tracker.h"
 
 int FeatureTracker::n_id = 0;
-#define Dense 
+#define KLT 0
 
 //判断pt是否在图像内
 bool inBorder(const cv::Point2f &pt)
@@ -120,7 +120,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     forw_pts.clear();
     
 
-#ifndef Dense
+#if KLT
     //只有上一枕检测到角点，才能在这一帧进行光流跟踪
     if (cur_pts.size() > 0)
     {
@@ -239,13 +239,11 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     //将track_cnt中的每个数进行加一处理，代表又跟踪了一次
     for (auto &n : track_cnt)
         n++;
-    if (1)
+    if (PUB_THIS_FRAME)
     {
-        
         rejectWithF();
         ROS_DEBUG("set mask begins");
         TicToc t_m;
-       /* 
         setMask();
         ROS_DEBUG("set mask costs %fms", t_m.toc());
 
@@ -280,7 +278,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         addPoints();
         ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
         
-       */
+       
     }
 
     #endif
