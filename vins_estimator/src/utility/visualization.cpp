@@ -210,6 +210,7 @@ void pubKeyPoses(const Estimator &estimator, const std_msgs::Header &header)
 void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header)
 {
     int idx2 = WINDOW_SIZE - 1;
+    
 
     if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)
     {
@@ -227,6 +228,7 @@ void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header)
         odometry.pose.pose.orientation.y = R.y();
         odometry.pose.pose.orientation.z = R.z();
         odometry.pose.pose.orientation.w = R.w();
+        ROS_DEBUG("pubCameraPose x:%f",odometry.pose.pose.position.x);
 
         pub_camera_pose.publish(odometry);
 

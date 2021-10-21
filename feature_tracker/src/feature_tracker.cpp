@@ -1,7 +1,7 @@
 #include "feature_tracker.h"
 
 int FeatureTracker::n_id = 0;
-#define KLT 0
+#define KLT 1
 
 //判断pt是否在图像内
 bool inBorder(const cv::Point2f &pt)
