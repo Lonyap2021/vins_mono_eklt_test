@@ -533,9 +533,7 @@ void Estimator::solveOdometry()
     if (solver_flag == NON_LINEAR)
     {
         TicToc t_tri;
-       
         f_manager.triangulate(Ps, tic, ric);// 三角化一些特征点，确保f_manager中的所有特征点都有一个深度值
-        
         optimization();// 滑动窗口紧耦合优化
     }
 }

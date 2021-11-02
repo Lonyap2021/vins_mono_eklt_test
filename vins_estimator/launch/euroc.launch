@@ -24,6 +24,6 @@
         <param name="skip_dis" type="double" value="0" />
     </node>
 
-    <include file="$(find vins_estimator)/launch/vins_rviz.launch" />
+    <!-- <include file="$(find vins_estimator)/launch/vins_rviz.launch" /> -->
 
 </launch>

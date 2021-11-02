@@ -281,9 +281,9 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
         }
 
     }
-    std::cout << "Ps:"<<Ps[0]<<std::endl;
-    std::cout << "tic:"<<tic[0]<<std::endl;
-    std::cout << "ric:"<<ric[0]<<std::endl;
+    // std::cout << "Ps:"<<Ps[0]<<std::endl;
+    // std::cout << "tic:"<<tic[0]<<std::endl;
+    // std::cout << "ric:"<<ric[0]<<std::endl;
 
     
 }

@@ -109,15 +109,14 @@ int size_dense = 1500;
 
 void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 {
-    KLT_STATUS = 1;
+    // KLT_STATUS = 1;
     if(KLT_STATUS){
         ROS_INFO("KLT_STATUS:%d",KLT_STATUS);
         readImageKlt(_img,_cur_time);
     }else{
         // readImageDense(_img,_cur_time);
         ROS_INFO("KLT_STATUS:%d",KLT_STATUS);
-        readImageDense_test(_img,_cur_time);
-        keyPoints.clear();
+        readImageDense_test(_img,_cur_time); 
     }
 }
 
@@ -362,7 +361,7 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
     cv::Mat img;
     TicToc t_r;
     cur_time = _cur_time;
-   
+    cv::Mat image = _img;
    //若控制参数 EQUALIZE 为真,则调用 cv::creatCLAHE()对输入图像做自适应直方图均衡
     if (EQUALIZE)
     {
@@ -375,9 +374,28 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         img = _img;
 
     if(keyPoints.size()==0) {
-        for(int i = 0;i<cur_pts.size();i++){
-            keyPoints.push_back(cur_pts[i]);
-        }
+        //将klt特征点给稠密进行追踪
+        // for(int i = 0;i<cur_pts.size();i++){
+        //     keyPoints.push_back(cur_pts[i]);
+        // }
+        //均匀取图片上的像素点进行追踪
+        int step = 60;
+        for(int y=0;y<_img.rows;y+=step)
+            for(int x = 0;x<_img.cols;x+=step)
+            {
+                keyPoints.push_back(cv::Point(x, y));       
+            }
+
+        ids.clear();
+        // int step = 60;
+        int num = 0;
+        for(int y=0;y<_img.rows;y+=step)
+            for(int x = 0;x<_img.cols;x+=step)
+            {
+                ids.push_back(num); 
+                num++;      
+            }
+        ROS_DEBUG("keyPoints:%d",keyPoints.size());
     }
 
     if (forw_img.empty())
@@ -401,22 +419,10 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
     track_cnt.clear();
     cur_un_pts.clear();
     cur_pts.clear();
+    prev_pts.clear();
     
-    // if(prev_test==0){
-    //     ids.clear();
-    //     prev_test=1;
-    //     int num = 0;
-    //     int step = 18;
-    //     for(int x = 0;x<5;x++)
-    //     {
-    //         ids.push_back(num);
-    //         num = num+1;
-    //     }
-    //     ROS_INFO("ids init size %d",ids.size());
-    //     size_dense = num;
-    // }
     //只有上一枕检测到角点，才能在这一帧进行光流跟踪
-    // ids.clear();
+    
     if(isnotFirstFram){
         isnotFirstFram++;
         cv::calcOpticalFlowFarneback(cur_img, forw_img, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
@@ -425,18 +431,23 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         cv::Scalar color = cv::Scalar(0, 255, 0);
         vector<uchar> status;
         status.clear();
-    
+        
         for(int i =0;i<keyPoints.size();i++){
             int y = keyPoints[i].y;
             int x = keyPoints[i].x;
+            
             const cv::Point2f& fxy = flow.at<cv::Point2f>(y, x);
             cur_pts.push_back(cv::Point(x, y));
             forw_pts.push_back(cv::Point(cvRound(x + fxy.x), cvRound(y + fxy.y)));
+            if(fabs(fxy.x-0.0)<0.001 ||fabs(fxy.y-0.0)<0.001){
+                    status.push_back(0);
+                    track_cnt.push_back(1);
+                    continue;   
+            }
             status.push_back(1);
             track_cnt.push_back(2);
         } 
-        
-        ROS_DEBUG("cur_pts flow size is %d\n",cur_pts.size());
+        // ROS_DEBUG("cur_pts flow size is %d\n",cur_pts.size());
         // ROS_DEBUG("forw_pts flow size is %d\n",forw_pts.size());
         // ROS_INFO("status size is %d",status.size());
         //判断跟踪的光流点，是否在图像内，跟踪的特征点在图像外状态数组内设为0
@@ -448,10 +459,12 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         reduceVector(cur_pts, status);
         reduceVector(forw_pts, status);
         //将光流跟踪后的点的id和跟踪次数，根据跟踪的状态(status)进行重组
+        ROS_INFO("ids size is %d",ids.size());
         reduceVector(ids, status);
-        // ROS_INFO("ids size is %d",ids.size());
         reduceVector(cur_un_pts, status);
         reduceVector(track_cnt, status);
+        
+        
     }
 
     //将track_cnt中的每个数进行加一处理，代表又跟踪了一次
