@@ -1,3 +1,11 @@
+/*
+ * @Descripttion: 
+ * @version: 
+ * @Author: Lonya Peng
+ * @Date: 2021-10-15 15:41:48
+ * @LastEditors: Lonya Peng
+ * @LastEditTime: 2021-10-25 11:14:14
+ */
 #pragma once
 #include <ros/ros.h>
 #include <opencv2/highgui/highgui.hpp>
@@ -23,5 +31,6 @@ extern int STEREO_TRACK;
 extern int EQUALIZE;//1  if image is too dark or light, trun on equalize to find enough features
 extern int FISHEYE;//0 if using fisheye, trun on it. A circle mask will be loaded to remove edge noisy points
 extern bool PUB_THIS_FRAME;
+extern bool KLT_STATUS;
 
 void readParameters(ros::NodeHandle &n);

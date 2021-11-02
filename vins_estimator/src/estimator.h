@@ -117,7 +117,7 @@ class Estimator
     int loop_window_index;
 
     MarginalizationInfo *last_marginalization_info;
-    vector<double *> last_marginalization_parameter_blocks;
+    vector<double *> last_marginalization_parameter_blocks;//被边缘化留下的先验信息,先验矩阵对应的状态量X
 
     map<double, ImageFrame> all_image_frame;
     IntegrationBase *tmp_pre_integration;

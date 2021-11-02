@@ -15,6 +15,8 @@ ros::Publisher pub_keyframe_pose;
 ros::Publisher pub_keyframe_point;
 ros::Publisher pub_extrinsic;
 
+ros::Publisher pub_status;
+
 CameraPoseVisualization cameraposevisual(0, 1, 0, 1);
 CameraPoseVisualization keyframebasevisual(0.0, 0.0, 1.0, 1.0);
 static double sum_of_path = 0;
@@ -36,10 +38,23 @@ void registerPub(ros::NodeHandle &n)
     pub_extrinsic = n.advertise<nav_msgs::Odometry>("extrinsic", 1000);
     pub_relo_relative_pose=  n.advertise<nav_msgs::Odometry>("relo_relative_pose", 1000);
 
+    pub_status = n.advertise<std_msgs::Int32>("status",1000);
+
     cameraposevisual.setScale(1);
     cameraposevisual.setLineWidth(0.05);
     keyframebasevisual.setScale(0.1);
     keyframebasevisual.setLineWidth(0.01);
+}
+
+void pubStatus(const Estimator &estimator)
+{
+    std_msgs::Int32 status_msg;
+    if(estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)
+        status_msg.data = 1;
+    else
+        status_msg.data = 0;
+    pub_status.publish(status_msg);
+
 }
 
 void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, const Eigen::Vector3d &V, const std_msgs::Header &header)

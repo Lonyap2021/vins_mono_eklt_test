@@ -6,6 +6,7 @@
 #include <std_msgs/Bool.h>
 #include <cv_bridge/cv_bridge.h>
 #include <message_filters/subscriber.h>
+#include <std_msgs/Int32.h>
 
 #include "feature_tracker.h"
 
@@ -24,6 +25,17 @@ int pub_count = 1;
 bool first_image_flag = true;
 double last_image_time = 0;
 bool init_pub = 0;
+int save_img = 0;
+
+int frame_flag=0;
+
+void klt_status_callback(const std_msgs::Int32 &status_msg)
+{
+    if(status_msg.data==0)
+        KLT_STATUS = 1;
+    else
+        KLT_STATUS = 0;
+}
 
 void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 {
@@ -35,6 +47,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         return;
     }
     // detect unstable camera stream
+    //频率控制 (1)对于时间戳错乱的帧，重新初始化；
     if (img_msg->header.stamp.toSec() - last_image_time > 1.0 || img_msg->header.stamp.toSec() < last_image_time)
     {
         ROS_WARN("image discontinue! reset the feature tracker!");
@@ -79,6 +92,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 
     cv::Mat show_img = ptr->image;
     TicToc t_r;
+
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
         ROS_DEBUG("processing camera %d", i);
@@ -113,6 +127,8 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
    if (PUB_THIS_FRAME)
    {
         pub_count++;
+        
+        save_img++;
         sensor_msgs::PointCloudPtr feature_points(new sensor_msgs::PointCloud);
         sensor_msgs::ChannelFloat32 id_of_point;
         sensor_msgs::ChannelFloat32 u_of_point;
@@ -131,14 +147,12 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
             auto &cur_pts = trackerData[i].cur_pts;
             auto &ids = trackerData[i].ids;
             auto &pts_velocity = trackerData[i].pts_velocity;
-
+            
             for (unsigned int j = 0; j < ids.size(); j++)
             {
                 if (trackerData[i].track_cnt[j]> 1)
                 {
-                    
                     int p_id = ids[j];
-                    
                     // hash_ids[i].insert(p_id);
                     geometry_msgs::Point32 p;
                     p.x = un_pts[j].x;
@@ -184,7 +198,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                     double len = std::min(1.0, 1.0 * trackerData[i].track_cnt[j] / WINDOW_SIZE);
                     cv::circle(tmp_img, trackerData[i].cur_pts[j], 2, cv::Scalar(255 * (1 - len), 0, 255 * len), 2);
                     //draw speed line
-                    /*
+                    
                     Vector2d tmp_cur_un_pts (trackerData[i].cur_un_pts[j].x, trackerData[i].cur_un_pts[j].y);
                     Vector2d tmp_pts_velocity (trackerData[i].pts_velocity[j].x, trackerData[i].pts_velocity[j].y);
                     Vector3d tmp_prev_un_pts;
@@ -193,13 +207,15 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                     Vector2d tmp_prev_uv;
                     trackerData[i].m_camera->spaceToPlane(tmp_prev_un_pts, tmp_prev_uv);
                     cv::line(tmp_img, trackerData[i].cur_pts[j], cv::Point2f(tmp_prev_uv.x(), tmp_prev_uv.y()), cv::Scalar(255 , 0, 0), 1 , 8, 0);
-                    */
-                    //char name[10];
-                    //sprintf(name, "%d", trackerData[i].ids[j]);
-                    //cv::putText(tmp_img, name, trackerData[i].cur_pts[j], cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
+                    
+                    char name[10];
+                    sprintf(name, "%d", trackerData[i].ids[j]);
+                    cv::putText(tmp_img, name, trackerData[i].cur_pts[j], cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255));
                 }
             }
             //cv::imshow("vis", stereo_img);
+            std::string img_str = "/home/ply/vins-mono/src/image/";
+            cv::imwrite(img_str+to_string(save_img)+".png",stereo_img);
             //cv::waitKey(5);
             pub_match.publish(ptr->toImageMsg());
         }
@@ -236,9 +252,14 @@ int main(int argc, char **argv)
 
     ros::Subscriber sub_img = n.subscribe(IMAGE_TOPIC, 100, img_callback);
 
+    ros::Subscriber sub_status = n.subscribe("/vins_estimator/status",100,klt_status_callback);
+
     pub_img = n.advertise<sensor_msgs::PointCloud>("feature", 1000);
     pub_match = n.advertise<sensor_msgs::Image>("feature_img",1000);
     pub_restart = n.advertise<std_msgs::Bool>("restart",1000);
+
+    
+    
     /*
     if (SHOW_TRACK)
         cv::namedWindow("vis", cv::WINDOW_NORMAL);

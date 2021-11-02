@@ -1,7 +1,12 @@
 #include "feature_tracker.h"
 
 int FeatureTracker::n_id = 0;
-#define KLT 0
+//  #define KLT 0
+// int KLT = 1;
+
+extern int KLT;
+
+std::vector<cv::Point2f> keyPoints;
 
 //判断pt是否在图像内
 bool inBorder(const cv::Point2f &pt)
@@ -45,12 +50,11 @@ void FeatureTracker::setMask()
     else
         mask = cv::Mat(ROW, COL, CV_8UC1, cv::Scalar(255));//纯白色
     
-
     // prefer to keep features that are tracked for long time
     //保存长时间跟踪到的特征点
     //vector<pair<某一点跟踪次数，pair<某一点，某一点的id>>> cnt_pts_id
     vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id;
-
+    //操作对象是forw_pts,通过光流法在当前帧中仍然能追踪到的那些特征点在当前帧中的像素坐标！所以forw_pts里面放着的都是老特征点
     for (unsigned int i = 0; i < forw_pts.size(); i++)
         cnt_pts_id.push_back(make_pair(track_cnt[i], make_pair(forw_pts[i], ids[i])));
 
@@ -79,6 +83,15 @@ void FeatureTracker::setMask()
     }
 }
 
+int image_width = 752;
+int image_height = 480;
+void FeatureTracker::addPointsDense()
+{
+    int num = image_width/16*image_height/16 - cur_pts.size();
+    for(int i = 0;i<num;i++)
+        ids.push_back(-1);
+}
+
 //添加新检测到的特征点n_pts，ID初始化-1，跟踪次数1
 void FeatureTracker::addPoints()
 {
@@ -89,13 +102,31 @@ void FeatureTracker::addPoints()
         track_cnt.push_back(1);
     }
 }
-//对图像使用光流法进行特征点跟踪
+int prev_klt_status = 0;
+int prev_test = 0;
+int size_dense = 1500;
+
+
 void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
+{
+    KLT_STATUS = 1;
+    if(KLT_STATUS){
+        ROS_INFO("KLT_STATUS:%d",KLT_STATUS);
+        readImageKlt(_img,_cur_time);
+    }else{
+        // readImageDense(_img,_cur_time);
+        ROS_INFO("KLT_STATUS:%d",KLT_STATUS);
+        readImageDense_test(_img,_cur_time);
+        keyPoints.clear();
+    }
+}
+
+void FeatureTracker::readImageKlt(const cv::Mat &_img, double _cur_time)
 {
     cv::Mat img;
     TicToc t_r;
     cur_time = _cur_time;
-    
+
    //若控制参数 EQUALIZE 为真,则调用 cv::creatCLAHE()对输入图像做自适应直方图均衡
     if (EQUALIZE)
     {
@@ -114,13 +145,12 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     else
     {
         forw_img = img;
+        
     }
     //两个作用：1.在光流检测中存储跟踪到的点,2.在goodFeaturetotrack里存储检测到的角点
     //为了不使两者之间数据混乱，每次在进行1,2步时都要进行清空，goodFeaturetotrack里的forw_pts是在mask里清空的
     forw_pts.clear();
     
-
-#if KLT
     //只有上一枕检测到角点，才能在这一帧进行光流跟踪
     if (cur_pts.size() > 0)
     {
@@ -129,7 +159,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         vector<float> err;
         //vector<cv::Point2f> prev_pts, cur_pts, forw_pts;
         //cur_pts:光流法需要找到的二维点的vector
-        //cur_pts:输入特征在第二幅图像中计算出的新位置的二维点（单精度浮点坐标）的输出vector
+        //forw_pts:输入特征在第二幅图像中计算出的新位置的二维点（单精度浮点坐标）的输出vector
         //status:如果对应特征的光流被发现，数组中的每一个元素都被设置为 1， 否则设置为 0。
         cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, forw_pts, status, err, cv::Size(21, 21), 3);
         //判断跟踪的光流点，是否在图像内，跟踪的特征点在图像外状态数组内设为0
@@ -148,19 +178,21 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     }
     //将track_cnt中的每个数进行加一处理，代表又跟踪了一次
     for (auto &n : track_cnt)
-        n++;
+        n++; //数值代表被追踪的次数，数值越大，说明被追踪的就越久
 
     if (PUB_THIS_FRAME)
     {
-        rejectWithF();
+        rejectWithF();//通过基本矩阵剔除outliers
         ROS_DEBUG("set mask begins");
         TicToc t_m;
-        setMask();
+        setMask();//对跟踪点进行排序并去除密集点
         ROS_DEBUG("set mask costs %fms", t_m.toc());
 
         ROS_DEBUG("detect feature begins");
         TicToc t_t;
         //光流跟踪新增加的检测角点个数
+        //一共需要MAX_CNT个特征点，当前有static_cast(forw_pts.size())个特征点，
+        //所以需要补充n_max_cnt = MAX_CNT - static_cast(forw_pts.size())个特征点
         int n_max_cnt = MAX_CNT - static_cast<int>(forw_pts.size());
         //n_max_cnt=0,所明不需要跟踪
         if (n_max_cnt > 0)
@@ -187,20 +219,75 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         //加入新增加的点
         addPoints();
         ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
+    } 
+    
+    prev_img = cur_img;
+    prev_pts = cur_pts;
+    prev_un_pts = cur_un_pts;
+    cur_img = forw_img;
+    cur_pts = forw_pts;
+    undistortedPoints();
+    prev_time = cur_time;
+    prev_klt_status=KLT_STATUS;
+   
+}
+
+int isnotFirstFram = 0;
+void FeatureTracker::readImageDense(const cv::Mat &_img, double _cur_time)
+{
+    cv::Mat img;
+    TicToc t_r;
+    cur_time = _cur_time;
+   
+   //若控制参数 EQUALIZE 为真,则调用 cv::creatCLAHE()对输入图像做自适应直方图均衡
+    if (EQUALIZE)
+    {
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
+        TicToc t_c;
+        clahe->apply(_img, img);
+        ROS_DEBUG("CLAHE costs: %fms", t_c.toc());
     }
+    else
+        img = _img;
 
-
-#else
-    //判断是否第二帧，开始进行光流跟踪
-    ids.clear();
+    if (forw_img.empty())
+    {
+        prev_img = cur_img = forw_img = img;
+    }
+    else
+    {
+        forw_img = img;
+        isnotFirstFram = 1;
+    }
+    //两个作用：1.在光流检测中存储跟踪到的点,2.在goodFeaturetotrack里存储检测到的角点
+    //为了不使两者之间数据混乱，每次在进行1,2步时都要进行清空，goodFeaturetotrack里的forw_pts是在mask里清空的
+    forw_pts.clear();
     track_cnt.clear();
     cur_un_pts.clear();
     cur_pts.clear();
-    if(cur_img.data){
+
+    if(prev_test==0){
+        ids.clear();
+        prev_test=1;
+        int num = 0;
+        int step = 18;
+        for(int y=0;y<_img.rows;y+=step)
+            for(int x = 0;x<_img.cols;x+=step)
+            {
+                ids.push_back(num);
+                num = num+1;
+            }
+        ROS_INFO("ids init size %d",ids.size());
+        size_dense = num;
+    }
+
+    //只有上一枕检测到角点，才能在这一帧进行光流跟踪
+    // ids.clear();
+    if(isnotFirstFram){
         
         cv::calcOpticalFlowFarneback(cur_img, forw_img, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
         cv::cvtColor(cur_img, cflow, cv::COLOR_GRAY2BGR);
-        int step = 16;
+        int step = 18;
         cv::Scalar color = cv::Scalar(0, 255, 0);
         vector<uchar> status;
         status.clear();
@@ -209,18 +296,20 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
             for(int x = 0;x<cflow.cols;x+=step)
             {
                 const cv::Point2f& fxy = flow.at<cv::Point2f>(y, x);
+                // if(fabs(fxy.x-0.0)<0.001 ||fabs(fxy.y-0.0)<0.001){
+                //     status.push_back(0);
+                //     continue;   
+                // }
                 cur_pts.push_back(cv::Point(x, y));
                 forw_pts.push_back(cv::Point(cvRound(x + fxy.x), cvRound(y + fxy.y)));
-
                 status.push_back(1);
                 track_cnt.push_back(2);
-                ids.push_back(x+y*cflow.cols);
                 cv::line(cflow, cv::Point(x, y), cv::Point(cvRound(x + fxy.x), cvRound(y + fxy.y)), color);
                 cv::circle(cflow, cv::Point(x, y), 2, color, -1);
             } 
-        
-        // ROS_DEBUG("cur_pts flow size is %d\n",cur_pts.size());
+        ROS_DEBUG("cur_pts flow size is %d\n",cur_pts.size());
         // ROS_DEBUG("forw_pts flow size is %d\n",forw_pts.size());
+        // ROS_INFO("status size is %d",status.size());
         //判断跟踪的光流点，是否在图像内，跟踪的特征点在图像外状态数组内设为0
         for (int i = 0; i < int(forw_pts.size()); i++)
             if (status[i] && !inBorder(forw_pts[i]))
@@ -229,9 +318,9 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         reduceVector(prev_pts, status);
         reduceVector(cur_pts, status);
         reduceVector(forw_pts, status);
-
         //将光流跟踪后的点的id和跟踪次数，根据跟踪的状态(status)进行重组
         reduceVector(ids, status);
+        // ROS_INFO("ids size is %d",ids.size());
         reduceVector(cur_un_pts, status);
         reduceVector(track_cnt, status);
     }
@@ -246,11 +335,247 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         TicToc t_m;
         setMask();
         ROS_DEBUG("set mask costs %fms", t_m.toc());
-
         ROS_DEBUG("detect feature begins");
         TicToc t_t;
         
         //光流跟踪新增加的检测角点个数
+        int n_max_cnt = size_dense - static_cast<int>(forw_pts.size());  
+        if (n_max_cnt > 0)
+        {
+            addPointsDense();
+        }
+    }
+    
+    prev_img = cur_img;
+    prev_pts = cur_pts;
+    prev_un_pts = cur_un_pts;
+    cur_img = forw_img;
+    cur_pts = forw_pts;
+    undistortedPoints();
+    prev_time = cur_time;
+    prev_klt_status=KLT_STATUS;
+    
+}
+
+void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
+{
+    cv::Mat img;
+    TicToc t_r;
+    cur_time = _cur_time;
+   
+   //若控制参数 EQUALIZE 为真,则调用 cv::creatCLAHE()对输入图像做自适应直方图均衡
+    if (EQUALIZE)
+    {
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
+        TicToc t_c;
+        clahe->apply(_img, img);
+        ROS_DEBUG("CLAHE costs: %fms", t_c.toc());
+    }
+    else
+        img = _img;
+
+    if(keyPoints.size()==0) {
+        for(int i = 0;i<cur_pts.size();i++){
+            keyPoints.push_back(cur_pts[i]);
+        }
+    }
+
+    if (forw_img.empty())
+    {
+        prev_img = cur_img = forw_img = img;
+        //稀疏光流选择的五个点，给到稠密光流，进行追踪
+        // keyPoints.push_back(cv::Point(315.590668,356.079071));
+        // keyPoints.push_back(cv::Point(210.187225,432.795380));
+        // keyPoints.push_back(cv::Point(176.280899,402.470978));
+        // keyPoints.push_back(cv::Point(379.619476,55.647018));
+        // keyPoints.push_back(cv::Point(515.059937,200.531921)); 
+    }
+    else
+    {
+        forw_img = img;
+        isnotFirstFram = 1;
+    }
+    //两个作用：1.在光流检测中存储跟踪到的点,2.在goodFeaturetotrack里存储检测到的角点
+    //为了不使两者之间数据混乱，每次在进行1,2步时都要进行清空，goodFeaturetotrack里的forw_pts是在mask里清空的
+    forw_pts.clear();
+    track_cnt.clear();
+    cur_un_pts.clear();
+    cur_pts.clear();
+    
+    // if(prev_test==0){
+    //     ids.clear();
+    //     prev_test=1;
+    //     int num = 0;
+    //     int step = 18;
+    //     for(int x = 0;x<5;x++)
+    //     {
+    //         ids.push_back(num);
+    //         num = num+1;
+    //     }
+    //     ROS_INFO("ids init size %d",ids.size());
+    //     size_dense = num;
+    // }
+    //只有上一枕检测到角点，才能在这一帧进行光流跟踪
+    // ids.clear();
+    if(isnotFirstFram){
+        isnotFirstFram++;
+        cv::calcOpticalFlowFarneback(cur_img, forw_img, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
+        cv::cvtColor(cur_img, cflow, cv::COLOR_GRAY2BGR);
+        int step = 1;
+        cv::Scalar color = cv::Scalar(0, 255, 0);
+        vector<uchar> status;
+        status.clear();
+    
+        for(int i =0;i<keyPoints.size();i++){
+            int y = keyPoints[i].y;
+            int x = keyPoints[i].x;
+            const cv::Point2f& fxy = flow.at<cv::Point2f>(y, x);
+            cur_pts.push_back(cv::Point(x, y));
+            forw_pts.push_back(cv::Point(cvRound(x + fxy.x), cvRound(y + fxy.y)));
+            status.push_back(1);
+            track_cnt.push_back(2);
+        } 
+        
+        ROS_DEBUG("cur_pts flow size is %d\n",cur_pts.size());
+        // ROS_DEBUG("forw_pts flow size is %d\n",forw_pts.size());
+        // ROS_INFO("status size is %d",status.size());
+        //判断跟踪的光流点，是否在图像内，跟踪的特征点在图像外状态数组内设为0
+        for (int i = 0; i < int(forw_pts.size()); i++)
+            if (status[i] && !inBorder(forw_pts[i]))
+                status[i] = 0;
+        //将光流跟踪后的点的集合，根据跟踪的状态(status)进行重组
+        reduceVector(prev_pts, status);
+        reduceVector(cur_pts, status);
+        reduceVector(forw_pts, status);
+        //将光流跟踪后的点的id和跟踪次数，根据跟踪的状态(status)进行重组
+        reduceVector(ids, status);
+        // ROS_INFO("ids size is %d",ids.size());
+        reduceVector(cur_un_pts, status);
+        reduceVector(track_cnt, status);
+    }
+
+    //将track_cnt中的每个数进行加一处理，代表又跟踪了一次
+    for (auto &n : track_cnt)
+        n++;
+    if (PUB_THIS_FRAME)
+    {
+        // rejectWithF();
+        ROS_DEBUG("set mask begins");
+        TicToc t_m;
+        // setMask();
+        // ROS_DEBUG("set mask costs %fms", t_m.toc());
+        // ROS_DEBUG("detect feature begins");
+        // TicToc t_t;
+        
+        // //光流跟踪新增加的检测角点个数
+        // int n_max_cnt = size_dense - static_cast<int>(forw_pts.size());  
+        // if (n_max_cnt > 0)
+        // {
+        //     addPointsDense();
+        // }
+    }
+    
+    prev_img = cur_img;
+    prev_pts = cur_pts;
+    prev_un_pts = cur_un_pts;
+    cur_img = forw_img;
+    cur_pts = forw_pts;
+    undistortedPoints();
+    prev_time = cur_time;
+    prev_klt_status=KLT_STATUS;
+    if(isnotFirstFram>1){
+        keyPoints.clear();
+        keyPoints = forw_pts;
+    }
+    
+}
+
+//对图像使用光流法进行特征点跟踪
+void FeatureTracker::readImage1(const cv::Mat &_img, double _cur_time)
+{
+    cv::Mat img;
+    TicToc t_r;
+    cur_time = _cur_time;
+
+    // KLT_STATUS = 0;
+    // if(prev_klt_status!=KLT_STATUS){
+    //     forw_pts.clear();
+    //     cur_pts.clear();
+    //     prev_img = cur_img;
+    //     prev_pts.clear();
+    //     prev_un_pts.clear(); 
+    //     cur_un_pts.clear();   
+    // }
+   //若控制参数 EQUALIZE 为真,则调用 cv::creatCLAHE()对输入图像做自适应直方图均衡
+    if (EQUALIZE)
+    {
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
+        TicToc t_c;
+        clahe->apply(_img, img);
+        ROS_DEBUG("CLAHE costs: %fms", t_c.toc());
+    }
+    else
+        img = _img;
+
+    if (forw_img.empty())
+    {
+        prev_img = cur_img = forw_img = img;
+    }
+    else
+    {
+        forw_img = img;
+        
+    }
+    //两个作用：1.在光流检测中存储跟踪到的点,2.在goodFeaturetotrack里存储检测到的角点
+    //为了不使两者之间数据混乱，每次在进行1,2步时都要进行清空，goodFeaturetotrack里的forw_pts是在mask里清空的
+    forw_pts.clear();
+    KLT_STATUS = 0;
+    // #if KLT
+    if(KLT_STATUS){  
+    //只有上一枕检测到角点，才能在这一帧进行光流跟踪
+    if (cur_pts.size() > 0)
+    {
+        TicToc t_o;
+        vector<uchar> status;
+        vector<float> err;
+        //vector<cv::Point2f> prev_pts, cur_pts, forw_pts;
+        //cur_pts:光流法需要找到的二维点的vector
+        //forw_pts:输入特征在第二幅图像中计算出的新位置的二维点（单精度浮点坐标）的输出vector
+        //status:如果对应特征的光流被发现，数组中的每一个元素都被设置为 1， 否则设置为 0。
+        cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, forw_pts, status, err, cv::Size(21, 21), 3);
+        //判断跟踪的光流点，是否在图像内，跟踪的特征点在图像外状态数组内设为0
+        for (int i = 0; i < int(forw_pts.size()); i++)
+            if (status[i] && !inBorder(forw_pts[i]))
+                status[i] = 0;
+        //将光流跟踪后的点的集合，根据跟踪的状态(status)进行重组
+        reduceVector(prev_pts, status);
+        reduceVector(cur_pts, status);
+        reduceVector(forw_pts, status);
+        //将光流跟踪后的点的id和跟踪次数，根据跟踪的状态(status)进行重组
+
+        reduceVector(ids, status);  
+
+        reduceVector(cur_un_pts, status);
+        reduceVector(track_cnt, status);
+        ROS_DEBUG("temporal optical flow costs: %fms", t_o.toc());
+    }
+    //将track_cnt中的每个数进行加一处理，代表又跟踪了一次
+    for (auto &n : track_cnt)
+        n++; //数值代表被追踪的次数，数值越大，说明被追踪的就越久
+
+    if (PUB_THIS_FRAME)
+    {
+        rejectWithF();//通过基本矩阵剔除outliers
+        ROS_DEBUG("set mask begins");
+        TicToc t_m;
+        setMask();//对跟踪点进行排序并去除密集点
+        ROS_DEBUG("set mask costs %fms", t_m.toc());
+
+        ROS_DEBUG("detect feature begins");
+        TicToc t_t;
+        //光流跟踪新增加的检测角点个数
+        //一共需要MAX_CNT个特征点，当前有static_cast(forw_pts.size())个特征点，
+        //所以需要补充n_max_cnt = MAX_CNT - static_cast(forw_pts.size())个特征点
         int n_max_cnt = MAX_CNT - static_cast<int>(forw_pts.size());
         //n_max_cnt=0,所明不需要跟踪
         if (n_max_cnt > 0)
@@ -277,66 +602,216 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         //加入新增加的点
         addPoints();
         ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
-        
-       
     }
 
-    #endif
+    }
+    // #else
+    else{
+    
+    //判断是否第二帧，开始进行光流跟踪
+    // ids.clear();
+    track_cnt.clear();
+    cur_un_pts.clear();
+    cur_pts.clear();
+
+    if(cur_img.data){
+        
+        cv::calcOpticalFlowFarneback(cur_img, forw_img, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
+        cv::cvtColor(cur_img, cflow, cv::COLOR_GRAY2BGR);
+        int step = 18;
+        cv::Scalar color = cv::Scalar(0, 255, 0);
+        vector<uchar> status;
+        status.clear();
+        
+        for(int y=0;y<cflow.rows;y+=step)
+            for(int x = 0;x<cflow.cols;x+=step)
+            {
+                const cv::Point2f& fxy = flow.at<cv::Point2f>(y, x);
+                // if(fabs(fxy.x-0.0)<0.001 ||fabs(fxy.y-0.0)<0.001){
+                //     status.push_back(0);
+                //     continue;   
+                // }
+                cur_pts.push_back(cv::Point(x, y));
+                forw_pts.push_back(cv::Point(cvRound(x + fxy.x), cvRound(y + fxy.y)));
+                status.push_back(1);
+                track_cnt.push_back(2);
+                cv::line(cflow, cv::Point(x, y), cv::Point(cvRound(x + fxy.x), cvRound(y + fxy.y)), color);
+                cv::circle(cflow, cv::Point(x, y), 2, color, -1);
+            } 
+        ROS_DEBUG("cur_pts flow size is %d\n",cur_pts.size());
+        // ROS_DEBUG("forw_pts flow size is %d\n",forw_pts.size());
+        // ROS_INFO("status size is %d",status.size());
+        //判断跟踪的光流点，是否在图像内，跟踪的特征点在图像外状态数组内设为0
+        for (int i = 0; i < int(forw_pts.size()); i++)
+            if (status[i] && !inBorder(forw_pts[i]))
+                status[i] = 0;
+        //将光流跟踪后的点的集合，根据跟踪的状态(status)进行重组
+        reduceVector(prev_pts, status);
+        reduceVector(cur_pts, status);
+        reduceVector(forw_pts, status);
+        //将光流跟踪后的点的id和跟踪次数，根据跟踪的状态(status)进行重组
+        reduceVector(ids, status);
+        // ROS_INFO("ids size is %d",ids.size());
+        reduceVector(cur_un_pts, status);
+        reduceVector(track_cnt, status);
+    }
+
+    //将track_cnt中的每个数进行加一处理，代表又跟踪了一次
+    for (auto &n : track_cnt)
+        n++;
+    if (PUB_THIS_FRAME)
+    {
+        rejectWithF();
+        ROS_DEBUG("set mask begins");
+        TicToc t_m;
+        setMask();
+        ROS_DEBUG("set mask costs %fms", t_m.toc());
+        ROS_DEBUG("detect feature begins");
+        TicToc t_t;
+        
+        //光流跟踪新增加的检测角点个数
+        int n_max_cnt = size_dense - static_cast<int>(forw_pts.size());  
+        if (n_max_cnt > 0)
+        {
+            addPointsDense();
+        }
+        /*
+        int n_max_cnt = MAX_CNT - static_cast<int>(forw_pts.size());
+        //n_max_cnt=0,所明不需要跟踪
+        if (n_max_cnt > 0)
+        {
+            if(mask.empty())
+                cout << "mask is empty " << endl;
+            if (mask.type() != CV_8UC1)
+                cout << "mask type wrong " << endl;
+            if (mask.size() != forw_img.size())
+                cout << "wrong size " << endl;
+            //n_pts：存放检测的角点
+            //MAX_CNT - forw_pts.size()：将检测的特征点数目
+            //MIN_DIST：区分相邻两个角点的最小距离（小于这个距离得点将进行合并）
+            //mask：它的维度必须和输入图像一致，且在mask值为0处不进行角点检测，目的是将以跟踪的点不进行角点检测，在其余
+            //部分均匀的进行角点检测
+            cv::goodFeaturesToTrack(forw_img, n_pts, MAX_CNT - forw_pts.size(), 0.01, MIN_DIST, mask);
+        }
+        else
+            n_pts.clear();
+        ROS_DEBUG("detect feature costs: %fms", t_t.toc());
+
+        ROS_DEBUG("add feature begins");
+        TicToc t_a;
+        //加入新增加的点
+        addPoints();
+        
+        ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
+        */
+    }
+    }
+    // #endif
     
     prev_img = cur_img;
     prev_pts = cur_pts;
     prev_un_pts = cur_un_pts;
     cur_img = forw_img;
     cur_pts = forw_pts;
-
     undistortedPoints();
     prev_time = cur_time;
-
+    prev_klt_status=KLT_STATUS;
     
+    if(!KLT_STATUS){
+        if(prev_test==0){
+            ids.clear();
+            prev_test=1;
+            int num = 0;
+            int step = 18;
+            for(int y=0;y<_img.rows;y+=step)
+                for(int x = 0;x<_img.cols;x+=step)
+                {
+                    ids.push_back(num);
+                    num = num+1;
+                }
+            ROS_INFO("ids init size %d",ids.size());
+            size_dense = num;
+        }
+    }
+ 
 }
+
+
 //通过F矩阵去除outliers
 void FeatureTracker::rejectWithF()
 {
     //初始第一帧时不进行处理
-    #ifndef Dense
-     if (forw_pts.size() >= 8)
-    #else
-    if(cur_img.data)
-    #endif
+    if(KLT_STATUS)
     {
-        ROS_DEBUG("FM ransac begins");
-        
-        TicToc t_f;
-        vector<cv::Point2f> un_cur_pts(cur_pts.size()), un_forw_pts(forw_pts.size());
-        for (unsigned int i = 0; i < cur_pts.size(); i++)
+        if (forw_pts.size() >= 8)
         {
-            Eigen::Vector3d tmp_p;
-            m_camera->liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p);
-            tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
-            tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
-            un_cur_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
+            ROS_DEBUG("FM ransac begins");
+            TicToc t_f;
+            //分别是上一帧和当前帧去畸变的像素坐标
+            vector<cv::Point2f> un_cur_pts(cur_pts.size()), un_forw_pts(forw_pts.size());
+            for (unsigned int i = 0; i < cur_pts.size(); i++)
+            {
+                Eigen::Vector3d tmp_p;
+                m_camera->liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p);
+                tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
+                tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
+                un_cur_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
 
-            m_camera->liftProjective(Eigen::Vector2d(forw_pts[i].x, forw_pts[i].y), tmp_p);
-            tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
-            tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
-            un_forw_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
+                m_camera->liftProjective(Eigen::Vector2d(forw_pts[i].x, forw_pts[i].y), tmp_p);
+                tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
+                tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
+                un_forw_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
+            }
+            vector<uchar> status;
+                
+             //status:在计算过程中没有被舍弃的点，元素被被置为1；否则置为0。
+            cv::findFundamentalMat(un_cur_pts, un_forw_pts, cv::FM_RANSAC, F_THRESHOLD, 0.99, status);
+                
+            int size_a = cur_pts.size();
+            reduceVector(prev_pts, status);
+            reduceVector(cur_pts, status);
+            reduceVector(forw_pts, status);
+            reduceVector(cur_un_pts, status);
+            reduceVector(ids, status);
+            reduceVector(track_cnt, status);
+            ROS_DEBUG("FM ransac: %d -> %lu: %f", size_a, forw_pts.size(), 1.0 * forw_pts.size() / size_a);
+            ROS_DEBUG("FM ransac costs: %fms", t_f.toc()); 
         }
-        vector<uchar> status;
-       
-        //status:在计算过程中没有被舍弃的点，元素被被置为1；否则置为0。
-        cv::findFundamentalMat(un_cur_pts, un_forw_pts, cv::FM_RANSAC, F_THRESHOLD, 0.99, status);
-    
-        int size_a = cur_pts.size();
-        reduceVector(prev_pts, status);
-        reduceVector(cur_pts, status);
-        reduceVector(forw_pts, status);
-        reduceVector(cur_un_pts, status);
-        reduceVector(ids, status);
-        reduceVector(track_cnt, status);
-        ROS_DEBUG("FM ransac: %d -> %lu: %f", size_a, forw_pts.size(), 1.0 * forw_pts.size() / size_a);
-        ROS_DEBUG("FM ransac costs: %fms", t_f.toc());
- 
-        
+    }
+    else{
+        if (cur_img.data)
+        {
+            ROS_DEBUG("FM ransac begins");
+            TicToc t_f;
+            //分别是上一帧和当前帧去畸变的像素坐标
+            vector<cv::Point2f> un_cur_pts(cur_pts.size()), un_forw_pts(forw_pts.size());
+            for (unsigned int i = 0; i < cur_pts.size(); i++)
+            {
+                Eigen::Vector3d tmp_p;
+                m_camera->liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p);
+                tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
+                tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
+                un_cur_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
+
+                m_camera->liftProjective(Eigen::Vector2d(forw_pts[i].x, forw_pts[i].y), tmp_p);
+                tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
+                tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
+                un_forw_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
+            }
+            vector<uchar> status;
+             //status:在计算过程中没有被舍弃的点，元素被被置为1；否则置为0。
+            cv::findFundamentalMat(un_cur_pts, un_forw_pts, cv::FM_RANSAC, F_THRESHOLD, 0.99, status);
+                
+            int size_a = cur_pts.size();
+            reduceVector(prev_pts, status);
+            reduceVector(cur_pts, status);
+            reduceVector(forw_pts, status);
+            reduceVector(cur_un_pts, status);
+            reduceVector(ids, status);
+            reduceVector(track_cnt, status);
+            ROS_DEBUG("FM ransac: %d -> %lu: %f", size_a, forw_pts.size(), 1.0 * forw_pts.size() / size_a);
+            ROS_DEBUG("FM ransac costs: %fms", t_f.toc()); 
+        }        
     }
 }
 //更新特征点id
@@ -344,8 +819,10 @@ bool FeatureTracker::updateID(unsigned int i)
 {
     if (i < ids.size())
     {
-        if (ids[i] == -1)
+        if (ids[i] == -1){
             ids[i] = n_id++;
+            
+        }
         return true;
     }
     else

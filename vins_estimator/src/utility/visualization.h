@@ -1,8 +1,17 @@
+/*
+ * @Descripttion: 
+ * @version: 
+ * @Author: Lonya Peng
+ * @Date: 2021-10-14 15:05:01
+ * @LastEditors: Lonya Peng
+ * @LastEditTime: 2021-10-25 11:03:17
+ */
 #pragma once
 
 #include <ros/ros.h>
 #include <std_msgs/Header.h>
 #include <std_msgs/Float32.h>
+#include <std_msgs/Int32.h>
 #include <std_msgs/Bool.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud.h>
@@ -50,3 +59,5 @@ void pubTF(const Estimator &estimator, const std_msgs::Header &header);
 void pubKeyframe(const Estimator &estimator);
 
 void pubRelocalization(const Estimator &estimator);
+
+void pubStatus(const Estimator &estimator);

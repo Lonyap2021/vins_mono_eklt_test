@@ -1,3 +1,11 @@
+/*
+ * @Descripttion: 
+ * @version: 
+ * @Author: Lonya Peng
+ * @Date: 2021-10-14 15:05:01
+ * @LastEditors: Lonya Peng
+ * @LastEditTime: 2021-10-25 11:13:20
+ */
 #include "parameters.h"
 
 std::string IMAGE_TOPIC;
@@ -17,6 +25,7 @@ int COL;
 int FOCAL_LENGTH;
 int FISHEYE;
 bool PUB_THIS_FRAME;
+bool KLT_STATUS;
 
 template <typename T>
 T readParam(ros::NodeHandle &n, std::string name)
@@ -64,6 +73,7 @@ void readParameters(ros::NodeHandle &n)
     STEREO_TRACK = false;
     FOCAL_LENGTH = 460;
     PUB_THIS_FRAME = false;
+    KLT_STATUS = true;
 
     if (FREQ == 0)
         FREQ = 100;

@@ -1,7 +1,7 @@
 <launch>
     <param name="/use_sim_time" value="true" />
 
-    <node pkg="rosbag" type="play" name="rosbagplay" args="/home/ply/Datasets/MH_01_easy.bag --clock -d 3" required="true"/>
+    <!-- <node pkg="rosbag" type="play" name="rosbagplay" args="/home/ply/Datasets/MH_01_easy.bag -clock -d 3" required="true"/> -->
 
     <arg name="config_path" default = "$(find feature_tracker)/../config/euroc/euroc_config.yaml" />
 	  <arg name="vins_path" default = "$(find feature_tracker)/../config/../" />
@@ -23,5 +23,7 @@
         <param name="skip_cnt" type="int" value="0" />
         <param name="skip_dis" type="double" value="0" />
     </node>
+
+    <include file="$(find vins_estimator)/launch/vins_rviz.launch" />
 
 </launch>
