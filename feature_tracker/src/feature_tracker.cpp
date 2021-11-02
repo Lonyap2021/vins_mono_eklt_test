@@ -250,15 +250,31 @@ void FeatureTracker::readImageDense(const cv::Mat &_img, double _cur_time)
     else
         img = _img;
 
+    if(isnotFirstFram==0){
+
+        forw_img.release();
+        
+    }
     if (forw_img.empty())
     {
         prev_img = cur_img = forw_img = img;
-       
     }
     else
     {
         forw_img = img;
-        isnotFirstFram = 1;
+        
+        ids.clear();
+        int num = 0;
+        for(int y=0;y<_img.rows;y+=step)
+            for(int x = 0;x<_img.cols;x+=step)
+            {
+                ids.push_back(num+size_dense*isnotFirstFram);
+                num = num+1;
+            }
+        ROS_INFO("ids init size %d",ids.size());
+        size_dense = num;
+        isnotFirstFram++;
+
     }
     //两个作用：1.在光流检测中存储跟踪到的点,2.在goodFeaturetotrack里存储检测到的角点
     //为了不使两者之间数据混乱，每次在进行1,2步时都要进行清空，goodFeaturetotrack里的forw_pts是在mask里清空的
@@ -267,28 +283,12 @@ void FeatureTracker::readImageDense(const cv::Mat &_img, double _cur_time)
     cur_un_pts.clear();
     cur_pts.clear();
 
-    if(prev_test==0){
-        ids.clear();
-        prev_test=1;
-        int num = 0;
-        int step = 18;
-        for(int y=0;y<_img.rows;y+=step)
-            for(int x = 0;x<_img.cols;x+=step)
-            {
-                ids.push_back(num);
-                num = num+1;
-            }
-        ROS_INFO("ids init size %d",ids.size());
-        size_dense = num;
-    }
-
     //只有上一枕检测到角点，才能在这一帧进行光流跟踪
     // ids.clear();
     if(isnotFirstFram){
         
         cv::calcOpticalFlowFarneback(cur_img, forw_img, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
         cv::cvtColor(cur_img, cflow, cv::COLOR_GRAY2BGR);
-        int step = 18;
         cv::Scalar color = cv::Scalar(0, 255, 0);
         vector<uchar> status;
         status.clear();
@@ -297,16 +297,17 @@ void FeatureTracker::readImageDense(const cv::Mat &_img, double _cur_time)
             for(int x = 0;x<cflow.cols;x+=step)
             {
                 const cv::Point2f& fxy = flow.at<cv::Point2f>(y, x);
-                // if(fabs(fxy.x-0.0)<0.001 ||fabs(fxy.y-0.0)<0.001){
-                //     status.push_back(0);
-                //     continue;   
-                // }
                 cur_pts.push_back(cv::Point(x, y));
                 forw_pts.push_back(cv::Point(cvRound(x + fxy.x), cvRound(y + fxy.y)));
+                if(fabs(fxy.x-0.0)<0.001 ||fabs(fxy.y-0.0)<0.001){
+                    status.push_back(0);
+                    track_cnt.push_back(1);
+                    continue;   
+                }
                 status.push_back(1);
                 track_cnt.push_back(2);
-                cv::line(cflow, cv::Point(x, y), cv::Point(cvRound(x + fxy.x), cvRound(y + fxy.y)), color);
-                cv::circle(cflow, cv::Point(x, y), 2, color, -1);
+                // cv::line(cflow, cv::Point(x, y), cv::Point(cvRound(x + fxy.x), cvRound(y + fxy.y)), color);
+                // cv::circle(cflow, cv::Point(x, y), 2, color, -1);
             } 
         ROS_DEBUG("cur_pts flow size is %d\n",cur_pts.size());
         // ROS_DEBUG("forw_pts flow size is %d\n",forw_pts.size());
@@ -340,11 +341,11 @@ void FeatureTracker::readImageDense(const cv::Mat &_img, double _cur_time)
         TicToc t_t;
         
         //光流跟踪新增加的检测角点个数
-        int n_max_cnt = size_dense - static_cast<int>(forw_pts.size());  
-        if (n_max_cnt > 0)
-        {
-            addPointsDense();
-        }
+        // int n_max_cnt = size_dense - static_cast<int>(forw_pts.size());  
+        // if (n_max_cnt > 0)
+        // {
+        //     addPointsDense();
+        // }
     }
     
     prev_img = cur_img;
@@ -354,9 +355,9 @@ void FeatureTracker::readImageDense(const cv::Mat &_img, double _cur_time)
     cur_pts = forw_pts;
     undistortedPoints();
     prev_time = cur_time;
-    prev_klt_status=KLT_STATUS;
-    
+    prev_klt_status=KLT_STATUS;   
 }
+
 
 void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
 {
@@ -428,7 +429,6 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         isnotFirstFram++;
         cv::calcOpticalFlowFarneback(cur_img, forw_img, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
         cv::cvtColor(cur_img, cflow, cv::COLOR_GRAY2BGR);
-        int step = 1;
         cv::Scalar color = cv::Scalar(0, 255, 0);
         vector<uchar> status;
         status.clear();
@@ -460,8 +460,9 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         reduceVector(cur_pts, status);
         reduceVector(forw_pts, status);
         //将光流跟踪后的点的id和跟踪次数，根据跟踪的状态(status)进行重组
-        ROS_INFO("ids size is %d",ids.size());
+        
         reduceVector(ids, status);
+        ROS_INFO("ids size is %d",ids.size());
         reduceVector(cur_un_pts, status);
         reduceVector(track_cnt, status);  
     }
@@ -471,7 +472,7 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         n++;
     if (PUB_THIS_FRAME)
     {
-        // rejectWithF();
+        rejectWithF();
         ROS_DEBUG("set mask begins");
         TicToc t_m;
         // setMask();
@@ -499,7 +500,12 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
     if(isnotFirstFram>1){
         keyPoints.clear();
         keyPoints = forw_pts;
+        if(ids.size()<20){
+            keyPoints.clear();
+            isnotFirstFram = 0;
+        }
     }
+
     
 }
 
