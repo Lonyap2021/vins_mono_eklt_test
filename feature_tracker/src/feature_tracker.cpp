@@ -7,6 +7,7 @@ int FeatureTracker::n_id = 0;
 extern int KLT;
 
 std::vector<cv::Point2f> keyPoints;
+int step = 60;
 
 //判断pt是否在图像内
 bool inBorder(const cv::Point2f &pt)
@@ -87,7 +88,7 @@ int image_width = 752;
 int image_height = 480;
 void FeatureTracker::addPointsDense()
 {
-    int num = image_width/16*image_height/16 - cur_pts.size();
+    int num = image_width/step*image_height/step - forw_pts.size();
     for(int i = 0;i<num;i++)
         ids.push_back(-1);
 }
@@ -252,6 +253,7 @@ void FeatureTracker::readImageDense(const cv::Mat &_img, double _cur_time)
     if (forw_img.empty())
     {
         prev_img = cur_img = forw_img = img;
+       
     }
     else
     {
@@ -362,6 +364,13 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
     TicToc t_r;
     cur_time = _cur_time;
     cv::Mat image = _img;
+
+    forw_pts.clear();
+    track_cnt.clear();
+    cur_un_pts.clear();
+    cur_pts.clear();
+    prev_pts.clear();
+    
    //若控制参数 EQUALIZE 为真,则调用 cv::creatCLAHE()对输入图像做自适应直方图均衡
     if (EQUALIZE)
     {
@@ -379,23 +388,21 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         //     keyPoints.push_back(cur_pts[i]);
         // }
         //均匀取图片上的像素点进行追踪
-        int step = 60;
-        for(int y=0;y<_img.rows;y+=step)
-            for(int x = 0;x<_img.cols;x+=step)
-            {
-                keyPoints.push_back(cv::Point(x, y));       
-            }
-
+        
         ids.clear();
-        // int step = 60;
         int num = 0;
         for(int y=0;y<_img.rows;y+=step)
             for(int x = 0;x<_img.cols;x+=step)
             {
+                keyPoints.push_back(cv::Point(x, y)); 
                 ids.push_back(num); 
                 num++;      
             }
         ROS_DEBUG("keyPoints:%d",keyPoints.size());
+        size_dense = num;
+        forw_img.release();
+        prev_img.release();
+        cur_img.release();
     }
 
     if (forw_img.empty())
@@ -415,12 +422,6 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
     }
     //两个作用：1.在光流检测中存储跟踪到的点,2.在goodFeaturetotrack里存储检测到的角点
     //为了不使两者之间数据混乱，每次在进行1,2步时都要进行清空，goodFeaturetotrack里的forw_pts是在mask里清空的
-    forw_pts.clear();
-    track_cnt.clear();
-    cur_un_pts.clear();
-    cur_pts.clear();
-    prev_pts.clear();
-    
     //只有上一枕检测到角点，才能在这一帧进行光流跟踪
     
     if(isnotFirstFram){
@@ -462,9 +463,7 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         ROS_INFO("ids size is %d",ids.size());
         reduceVector(ids, status);
         reduceVector(cur_un_pts, status);
-        reduceVector(track_cnt, status);
-        
-        
+        reduceVector(track_cnt, status);  
     }
 
     //将track_cnt中的每个数进行加一处理，代表又跟踪了一次
@@ -496,6 +495,7 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
     undistortedPoints();
     prev_time = cur_time;
     prev_klt_status=KLT_STATUS;
+
     if(isnotFirstFram>1){
         keyPoints.clear();
         keyPoints = forw_pts;
@@ -792,7 +792,8 @@ void FeatureTracker::rejectWithF()
         }
     }
     else{
-        if (cur_img.data)
+        // if (cur_img.data)
+        if(isnotFirstFram)
         {
             ROS_DEBUG("FM ransac begins");
             TicToc t_f;

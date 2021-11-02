@@ -1,0 +1,29 @@
+修改成需要初始化时进行稀疏点云匹配
+存在问题：
+１、存在问题，每一帧之间估测出来的位移很大？
+２、进行一段时间估测后出现big translation
+failure detection!
+system reboot!
+结果：中间旋转太大，程序会自动重新初始化，此时稀疏点云初始化匹配会回到原点？
+
+求解错误，failureDetection　系统重启
+
+修改feature_tracker每次初始化之前将前面的点全部clear，任然会回到原点,判断是在estimator中初始化时，是否将位置初始化了？
+
+
+兩個關鍵幀選擇標準：
+1、與上一個關鍵幀的平均視差。如果在當前幀和最新關鍵幀之間跟蹤的特徵點的平均視差超出某個特定閾值，則將該幀視爲新的關鍵幀。
+2、跟蹤質量。如果跟蹤的特徵數量低於某一閾值，則將此幀視爲新的關鍵幀。這個標準是爲了避免跟蹤特徵完全丟失。
+具體在bool FeatureManager::addFeatureCheckParallax()中實現。
+
+测试了是否使用rejectF() ，特征图有差异，但是差异不太大。
+
+将特征进行了过滤
+
+2021.11.1
+完成版本：使用稀疏光流进行初始化－－》稠密光流一直追踪稀疏光流初始化完成后的第一针特征点－－》三角化估计的ps r t 和optimization后的odom估计基本一致（包前20ｓ保持一致：20s后摄像头图像静止，稠密光流追踪的特征点基不存在了，轨迹出现很大的漂移）
+
+rejectWithF() 如果不补充特征点　当ids点数较少时，会报错
+FM ransac begins
+[feature_tracker-2] process has died [pid 5900, exit code -11, cmd /home/ply/vins-mono/devel/lib/feature_tracker/feature_tracker __name:=feature_tracker __log:=/home/ply/.ros/log/d4f96db8-3bb9-11ec-a283-004e01bdc5cc/feature_tracker-2.log].
+log file: /home/ply/.ros/log/d4f96db8-3bb9-11ec-a283-004e01bdc5cc/feature_tracker-2*.log
