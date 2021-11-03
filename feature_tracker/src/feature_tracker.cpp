@@ -105,7 +105,7 @@ void FeatureTracker::addPoints()
 }
 int prev_klt_status = 0;
 int prev_test = 0;
-int size_dense = 1500;
+int size_dense = 0;
 
 
 void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
@@ -358,7 +358,7 @@ void FeatureTracker::readImageDense(const cv::Mat &_img, double _cur_time)
     prev_klt_status=KLT_STATUS;   
 }
 
-
+int restart_frame = 0;
 void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
 {
     cv::Mat img;
@@ -396,9 +396,10 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
             for(int x = 0;x<_img.cols;x+=step)
             {
                 keyPoints.push_back(cv::Point(x, y)); 
-                ids.push_back(num); 
+                ids.push_back(num+size_dense*restart_frame); 
                 num++;      
             }
+        
         ROS_DEBUG("keyPoints:%d",keyPoints.size());
         size_dense = num;
         forw_img.release();
@@ -503,6 +504,7 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         if(ids.size()<20){
             keyPoints.clear();
             isnotFirstFram = 0;
+            restart_frame++;
         }
     }
 

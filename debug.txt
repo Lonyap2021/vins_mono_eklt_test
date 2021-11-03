@@ -27,3 +27,10 @@ rejectWithF() 如果不补充特征点　当ids点数较少时，会报错
 FM ransac begins
 [feature_tracker-2] process has died [pid 5900, exit code -11, cmd /home/ply/vins-mono/devel/lib/feature_tracker/feature_tracker __name:=feature_tracker __log:=/home/ply/.ros/log/d4f96db8-3bb9-11ec-a283-004e01bdc5cc/feature_tracker-2.log].
 log file: /home/ply/.ros/log/d4f96db8-3bb9-11ec-a283-004e01bdc5cc/feature_tracker-2*.log
+
+　
+１）使用均匀特征点进行稠密光流追踪，当特征点数据较少时，补充均匀特征点，ids进行还原（每次都与初始值一致），在静止时会出现漂移
+）２）使用均匀特征点进行稠密光流追踪，当特征点数据较少时，补充均匀特征点，ids 在前一次的基础上重新累加，在静止时会出现漂移比上一步大很多，但是机器人移动时，轨迹更接近稀疏获取的轨迹
+
+
+
