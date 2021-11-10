@@ -4,9 +4,10 @@
  * @Author: Lonya Peng
  * @Date: 2021-10-14 15:05:01
  * @LastEditors: Lonya Peng
- * @LastEditTime: 2021-10-25 11:13:20
+ * @LastEditTime: 2021-11-08 17:46:04
  */
 #include "parameters.h"
+
 
 std::string IMAGE_TOPIC;
 std::string IMU_TOPIC;
@@ -69,7 +70,7 @@ void readParameters(ros::NodeHandle &n)
         FISHEYE_MASK = VINS_FOLDER_PATH + "config/fisheye_mask.jpg";
     CAM_NAMES.push_back(config_file);
 
-    WINDOW_SIZE = 20;
+    WINDOW_SIZE = 1;
     STEREO_TRACK = false;
     FOCAL_LENGTH = 460;
     PUB_THIS_FRAME = false;

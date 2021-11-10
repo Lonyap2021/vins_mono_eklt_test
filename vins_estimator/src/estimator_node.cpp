@@ -95,6 +95,7 @@ void update()
 
 }
 
+//这个函数的作用就是把图像帧和对应的IMU数据们 配对起来,而且IMU数据时间是在图像帧的前面
 std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>>
 getMeasurements()
 {
@@ -128,6 +129,8 @@ getMeasurements()
             imu_buf.pop();
         }
         IMUs.emplace_back(imu_buf.front());
+        //注意：把最后一个IMU帧又放回到imu_buf里去了
+        //原因：最后一帧IMU信息是被相邻2个视觉帧共享的
         if (IMUs.empty())
             ROS_WARN("no imu between two image");
         measurements.emplace_back(IMUs, img_msg);
@@ -208,6 +211,7 @@ void relocalization_callback(const sensor_msgs::PointCloudConstPtr &points_msg)
 // thread: visual-inertial odometry
 void process()
 {
+    std::cout << "process"<<std::endl;
     while (true)
     {
         std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
@@ -312,6 +316,7 @@ void process()
                 image[feature_id].emplace_back(camera_id,  xyz_uv_velocity);
             }
             estimator.processImage(image, img_msg->header);
+            // estimator.processImageTest(image, img_msg->header);
 
             double whole_t = t_s.toc();
             printStatistics(estimator, whole_t);
@@ -325,6 +330,7 @@ void process()
             pubTF(estimator, header);
             pubKeyframe(estimator);
             pubStatus(estimator);
+            pubKeyPosesTest(estimator, header);
             if (relo_msg != NULL)
                 pubRelocalization(estimator);
             //ROS_ERROR("end: %f, at %f", img_msg->header.stamp.toSec(), ros::Time::now().toSec());
@@ -358,6 +364,7 @@ int main(int argc, char **argv)
     ros::Subscriber sub_image = n.subscribe("/feature_tracker/feature", 2000, feature_callback);
     ros::Subscriber sub_restart = n.subscribe("/feature_tracker/restart", 2000, restart_callback);
     ros::Subscriber sub_relo_points = n.subscribe("/pose_graph/match_points", 2000, relocalization_callback);
+    
 
     std::thread measurement_process{process};
     ros::spin();

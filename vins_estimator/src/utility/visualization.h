@@ -4,7 +4,7 @@
  * @Author: Lonya Peng
  * @Date: 2021-10-14 15:05:01
  * @LastEditors: Lonya Peng
- * @LastEditTime: 2021-10-25 11:03:17
+ * @LastEditTime: 2021-11-09 16:46:44
  */
 #pragma once
 
@@ -38,6 +38,7 @@ extern nav_msgs::Path path;
 extern ros::Publisher pub_pose_graph;
 extern int IMAGE_ROW, IMAGE_COL;
 
+
 void registerPub(ros::NodeHandle &n);
 
 void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, const Eigen::Vector3d &V, const std_msgs::Header &header);
@@ -49,6 +50,8 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header);
 void pubInitialGuess(const Estimator &estimator, const std_msgs::Header &header);
 
 void pubKeyPoses(const Estimator &estimator, const std_msgs::Header &header);
+
+void pubKeyPosesTest(const Estimator &estimator, const std_msgs::Header &header);
 
 void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header);
 

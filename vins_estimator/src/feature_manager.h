@@ -77,8 +77,10 @@ class FeatureManager
     int getFeatureCount();
 
     bool addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td);
+    bool addFeature(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,double td);
     void debugShow();
     vector<pair<Vector3d, Vector3d>> getCorresponding(int frame_count_l, int frame_count_r);
+    vector<pair<Vector3d, Vector3d>> getCorresponding();
 
     //void updateDepth(const VectorXd &x);
     void setDepth(const VectorXd &x);
@@ -92,6 +94,7 @@ class FeatureManager
     void removeOutlier();
     list<FeaturePerId> feature;
     int last_track_num;
+    // <FeaturePerId> feature_[2];
 
   private:
     double compensatedParallax2(const FeaturePerId &it_per_id, int frame_count);

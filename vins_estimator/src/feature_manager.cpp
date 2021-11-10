@@ -133,6 +133,7 @@ void FeatureManager::debugShow()
     }
 }
 
+
 /**
  * 函数功能：找出最新的两帧之间共视特征点的对应points
  * 传入的参数frame_count_l 为frame_count-1，倒数第二帧
@@ -154,7 +155,6 @@ vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_coun
             b = it.feature_per_frame[idx_r].point;
             //corres中存放的就是每一个特征it在两个帧中对应的point点对  
             corres.push_back(make_pair(a, b));
-
         }
     }
     return corres;
@@ -281,11 +281,7 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
         }
 
     }
-    // std::cout << "Ps:"<<Ps[0]<<std::endl;
-    // std::cout << "tic:"<<tic[0]<<std::endl;
-    // std::cout << "ric:"<<ric[0]<<std::endl;
-
-    
+    std::cout << "Ps:"<<Ps[0]<<std::endl;  
 }
 
 void FeatureManager::removeOutlier()

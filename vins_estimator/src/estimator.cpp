@@ -1,9 +1,13 @@
 #include "estimator.h"
 
+ofstream out("/home/ply/vins-mono/src/test.txt");
+int keyF = 0;
+
 Estimator::Estimator(): f_manager{Rs}
 {
     ROS_INFO("init begins");
     clearState();
+    
 }
 
 void Estimator::setParameter()
@@ -117,6 +121,23 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
     gyr_0 = angular_velocity;
 }
 
+void Estimator::processImageTest(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const std_msgs::Header &header){
+    ROS_DEBUG("new image coming ------------------------------------------");
+    ROS_DEBUG("Adding feature points %lu", image.size());
+    if (f_manager.addFeatureCheckParallax(frame_count, image, td))
+        marginalization_flag = MARGIN_OLD;
+    else
+        marginalization_flag = MARGIN_SECOND_NEW;
+    keyF++;
+    if (frame_count != 0)
+    {
+        test();
+    }
+
+
+ 
+}
+
 void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const std_msgs::Header &header)
 {
     ROS_DEBUG("new image coming ------------------------------------------");
@@ -125,7 +146,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         marginalization_flag = MARGIN_OLD;
     else
         marginalization_flag = MARGIN_SECOND_NEW;
-    // marginalization_flag = MARGIN_OLD;
+    
     ROS_DEBUG("this frame is--------------------%s", marginalization_flag ? "reject" : "accept");
     ROS_DEBUG("%s", marginalization_flag ? "Non-keyframe" : "Keyframe");
     ROS_DEBUG("Solving %d", frame_count);
@@ -136,6 +157,10 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     imageframe.pre_integration = tmp_pre_integration;
     all_image_frame.insert(make_pair(header.stamp.toSec(), imageframe));
     tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
+
+    keyF++;
+    if (frame_count != 0)  
+        test();
 
     if(ESTIMATE_EXTRINSIC == 2)
     {
@@ -154,7 +179,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             }
         }
     }
-    
+    // solver_flag = NON_LINEAR;
     //进行初始化,  一般初始化只进行一次；
     if (solver_flag == INITIAL)
     {        //frame_count是滑动窗口中图像帧的数量，一开始初始化为0，滑动窗口总帧数WINDOW_SIZE=10
@@ -223,6 +248,31 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         last_P0 = Ps[0];
     }
 }
+
+
+Vector3d Pref={0,0,1};
+
+bool Estimator::test(){
+
+    Matrix3d relative_R;//定义容器
+    Vector3d relative_T;
+    
+    if (!relativePose(relative_R, relative_T))
+    {
+        ROS_INFO("Not enough features or parallax; Move device around");
+        return false;
+    }
+    
+    Vector3d Pcur = relative_R * Pref+relative_T;
+    Pref = Pcur;
+    Pst = Pcur;
+    std::cout<<keyF<<"    "<<Pcur[0]<<" "<<Pcur[1]<<endl;
+    if(out.is_open()){
+        out<<keyF<<"    "<<Pcur[0]<<" "<<Pcur[1]<<endl;
+    }
+    return true;
+}
+
 
 //原理上讲的初始化，包括纯视觉SfM，视觉和IMU的松耦合
 //1、纯视觉SFM估计滑动窗内相机位姿和路标点逆深度 （k时刻的相机相对于0时刻的位姿态 Ck0，C0看作参考坐标系，可以与世界坐标系转换） 
@@ -492,6 +542,7 @@ bool Estimator::visualInitialAlign()
 //getCorresponding()的作用就是找到当前帧与最新一帧所有特征点在对应2帧下分别的归一化坐标，并配对，以供求出相对位姿时使用。 b.计算l帧与最新一帧的相对位姿关系
 bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l) //output array R,t
 {
+    
     // find previous frame which contians enough correspondance and parallex with newest frame
     for (int i = 0; i < WINDOW_SIZE; i++)
     {//滑窗内的所有帧都和最新一帧进行视差比较
@@ -508,7 +559,6 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
                 Vector2d pts_1(corres[j].second(0), corres[j].second(1));
                 double parallax = (pts_0 - pts_1).norm();
                 sum_parallax = sum_parallax + parallax;
-
             }
             //计算平均视差
             //这里最核心的公式就是m_estimator.solveRelativeRT()
@@ -526,6 +576,38 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
     return false;
 }
 
+bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T) //output array R,t
+{
+    vector<pair<Vector3d, Vector3d>> corres;
+    
+    // corres = f_manager.getCorresponding(keyF-1, keyF);//寻找对应特征点归一化坐标//归一化坐标point(x,y,不需要z)
+    corres = f_manager.getCorresponding(frame_count - 1, frame_count);
+    cout << "corres.size()"<<corres.size()<<endl;
+    if (corres.size() > 5)
+    {
+        double sum_parallax = 0;
+        double average_parallax;//计算平均视差
+        for (int j = 0; j < int(corres.size()); j++)
+        {//第j个对应点在第i帧和最后一帧的(x,y)
+            Vector2d pts_0(corres[j].first(0), corres[j].first(1));//改成3，4呢(对应像素坐标，1-3是归一化xyz坐标)
+            Vector2d pts_1(corres[j].second(0), corres[j].second(1));
+            double parallax = (pts_0 - pts_1).norm();
+            sum_parallax = sum_parallax + parallax;
+        }
+        //计算平均视差
+        //这里最核心的公式就是m_estimator.solveRelativeRT()
+        average_parallax = 1.0 * sum_parallax / int(corres.size());//判断是否满足初始化条件：视差>30
+        ROS_DEBUG("average_parallax:%d",average_parallax* 460);
+        if(m_estimator.solveRelativeRT(corres, relative_R, relative_T))
+        {//solveRelativeRT()通过基础矩阵计算当前帧与第l帧之间的R和T,并判断内点数目是否足够
+            ROS_DEBUG("average_parallax %f and newest frame to triangulate the whole structure", average_parallax * 460);
+            return true;
+            //一旦这一帧与当前帧视差足够大了，那么就不再继续找下去了(再找只会和当前帧的视差越来越小）
+        }
+    }
+    return false;
+}
+
 void Estimator::solveOdometry()
 {
     // if (frame_count < WINDOW_SIZE)
@@ -534,7 +616,7 @@ void Estimator::solveOdometry()
     {
         TicToc t_tri;
         f_manager.triangulate(Ps, tic, ric);// 三角化一些特征点，确保f_manager中的所有特征点都有一个深度值
-        optimization();// 滑动窗口紧耦合优化
+        // optimization();// 滑动窗口紧耦合优化
     }
 }
 

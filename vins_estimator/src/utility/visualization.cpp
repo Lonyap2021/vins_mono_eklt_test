@@ -6,6 +6,7 @@ ros::Publisher pub_odometry, pub_latest_odometry;
 ros::Publisher pub_path, pub_relo_path;
 ros::Publisher pub_point_cloud, pub_margin_cloud;
 ros::Publisher pub_key_poses;
+ros::Publisher pub_key_poses_test;
 ros::Publisher pub_relo_relative_pose;
 ros::Publisher pub_camera_pose;
 ros::Publisher pub_camera_pose_visual;
@@ -16,6 +17,7 @@ ros::Publisher pub_keyframe_point;
 ros::Publisher pub_extrinsic;
 
 ros::Publisher pub_status;
+nav_msgs::Path path_test;
 
 CameraPoseVisualization cameraposevisual(0, 1, 0, 1);
 CameraPoseVisualization keyframebasevisual(0.0, 0.0, 1.0, 1.0);
@@ -31,6 +33,7 @@ void registerPub(ros::NodeHandle &n)
     pub_point_cloud = n.advertise<sensor_msgs::PointCloud>("point_cloud", 1000);
     pub_margin_cloud = n.advertise<sensor_msgs::PointCloud>("history_cloud", 1000);
     pub_key_poses = n.advertise<visualization_msgs::Marker>("key_poses", 1000);
+    pub_key_poses_test = n.advertise<nav_msgs::Path>("key_poses_test",1, true);
     pub_camera_pose = n.advertise<nav_msgs::Odometry>("camera_pose", 1000);
     pub_camera_pose_visual = n.advertise<visualization_msgs::MarkerArray>("camera_pose_visual", 1000);
     pub_keyframe_pose = n.advertise<nav_msgs::Odometry>("keyframe_pose", 1000);
@@ -117,6 +120,8 @@ void printStatistics(const Estimator &estimator, double t)
     if (ESTIMATE_TD)
         ROS_INFO("td %f", estimator.td);
 }
+
+
 
 void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
 {
@@ -221,6 +226,27 @@ void pubKeyPoses(const Estimator &estimator, const std_msgs::Header &header)
     }
     pub_key_poses.publish(key_poses);
 }
+
+void pubKeyPosesTest(const Estimator &estimator, const std_msgs::Header &header)
+{
+    Vector3d correct_pose;
+    correct_pose = estimator.Pst;
+    geometry_msgs::PoseStamped pose_stamped;
+    path_test.header = header;
+    path_test.header.frame_id = "world";
+    pose_stamped.pose.position.x = correct_pose.x();
+    pose_stamped.pose.position.y = correct_pose.y();
+    pose_stamped.pose.position.z = correct_pose.z();
+
+    pose_stamped.header.frame_id="world";
+    pose_stamped.header.stamp = header.stamp;
+    path_test.poses.push_back(pose_stamped);
+ 
+    pub_key_poses_test.publish(path_test);
+   
+}
+
+
 
 void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header)
 {

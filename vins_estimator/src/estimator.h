@@ -34,12 +34,13 @@ class Estimator
     void processIMU(double t, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
     void processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const std_msgs::Header &header);
     void setReloFrame(double _frame_stamp, int _frame_index, vector<Vector3d> &_match_points, Vector3d _relo_t, Matrix3d _relo_r);
-
+    void processImageTest(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const std_msgs::Header &header);
     // internal
     void clearState();
     bool initialStructure();
     bool visualInitialAlign();
     bool relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l);
+    bool relativePose(Matrix3d &relative_R, Vector3d &relative_T);
     void slideWindow();
     void solveOdometry();
     void slideWindowNew();
@@ -48,6 +49,7 @@ class Estimator
     void vector2double();
     void double2vector();
     bool failureDetection();
+    bool test();
 
 
     enum SolverFlag
@@ -68,12 +70,12 @@ class Estimator
     MatrixXd Ap[2], backup_A;
     VectorXd bp[2], backup_b;
 
-    Matrix3d ric[NUM_OF_CAM];
-    Vector3d tic[NUM_OF_CAM];
+    Matrix3d ric[NUM_OF_CAM]; //相机到IMU旋转　把imu坐标系当作body坐标系
+    Vector3d tic[NUM_OF_CAM];//相机到IMU平移
 
-    Vector3d Ps[(WINDOW_SIZE + 1)];
+    Vector3d Ps[(WINDOW_SIZE + 1)];//在世界坐标系的平移
     Vector3d Vs[(WINDOW_SIZE + 1)];
-    Matrix3d Rs[(WINDOW_SIZE + 1)];
+    Matrix3d Rs[(WINDOW_SIZE + 1)];//imu参考系旋转到世界坐标系的旋转矩
     Vector3d Bas[(WINDOW_SIZE + 1)];
     Vector3d Bgs[(WINDOW_SIZE + 1)];
     double td;
@@ -136,4 +138,6 @@ class Estimator
     Vector3d relo_relative_t;
     Quaterniond relo_relative_q;
     double relo_relative_yaw;
+
+    Vector3d Pst;
 };

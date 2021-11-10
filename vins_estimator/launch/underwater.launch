@@ -3,7 +3,7 @@
 
     <!-- <node pkg="rosbag" type="play" name="rosbagplay" args="/home/ply/Datasets/MH_01_easy.bag -clock -d 3" required="true"/> -->
 
-    <arg name="config_path" default = "$(find feature_tracker)/../config/euroc/euroc_config.yaml" />
+    <arg name="config_path" default = "$(find feature_tracker)/../config/davis_346c/davis_346c_underwater_config.yaml" />
 	  <arg name="vins_path" default = "$(find feature_tracker)/../config/../" />
     
     <node name="feature_tracker" pkg="feature_tracker" type="feature_tracker" output="screen">

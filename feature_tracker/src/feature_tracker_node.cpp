@@ -96,9 +96,11 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
         ROS_DEBUG("processing camera %d", i);
-        if (i != 1 || !STEREO_TRACK)
+        if (i != 1 || !STEREO_TRACK){
+            if(ptr->image.cols!=COL ||ptr->image.rows!=ROW)
+                return;
             trackerData[i].readImage(ptr->image.rowRange(ROW * i, ROW * (i + 1)), img_msg->header.stamp.toSec());
-        else
+        }else
         {
             if (EQUALIZE)
             {
@@ -227,8 +229,8 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "feature_tracker");
     ros::NodeHandle n("~");
-    // ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
-    ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
+    ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
+    // ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
     
     readParameters(n);
 
