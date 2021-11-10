@@ -1,3 +1,11 @@
+/*
+ * @Descripttion: 
+ * @version: 
+ * @Author: Lonya Peng
+ * @Date: 2021-10-14 15:05:01
+ * @LastEditors: Lonya Peng
+ * @LastEditTime: 2021-11-10 10:56:54
+ */
 #pragma once
 
 #include <ros/ros.h>
@@ -9,7 +17,7 @@
 #include <fstream>
 
 const double FOCAL_LENGTH = 460.0;
-const int WINDOW_SIZE = 10;
+const int WINDOW_SIZE = 2;
 const int NUM_OF_CAM = 1;
 const int NUM_OF_F = 1000;
 //#define UNIT_SPHERE_ERROR
