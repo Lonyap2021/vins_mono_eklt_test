@@ -7,7 +7,7 @@ int FeatureTracker::n_id = 0;
 extern int KLT;
 
 std::vector<cv::Point2f> keyPoints;
-int step = 60;
+int step = 30;
 
 //判断pt是否在图像内
 bool inBorder(const cv::Point2f &pt)
@@ -84,8 +84,8 @@ void FeatureTracker::setMask()
     }
 }
 
-int image_width = 752;
-int image_height = 480;
+int image_width = COL;
+int image_height = ROW;
 void FeatureTracker::addPointsDense()
 {
     int num = image_width/step*image_height/step - forw_pts.size();
@@ -110,7 +110,7 @@ int size_dense = 0;
 
 void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 {
-    // KLT_STATUS = 1;
+    KLT_STATUS = 0;
     if(KLT_STATUS){
         ROS_INFO("KLT_STATUS:%d",KLT_STATUS);
         readImageKlt(_img,_cur_time);
@@ -392,11 +392,13 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         
         ids.clear();
         int num = 0;
-        for(int y=0;y<_img.rows;y+=step)
+        int start_row = ROW/2;
+        for(int y=start_row;y<_img.rows;y+=step)
             for(int x = 0;x<_img.cols;x+=step)
             {
                 keyPoints.push_back(cv::Point(x, y)); 
-                ids.push_back(num+size_dense*restart_frame); 
+                // ids.push_back(num+size_dense*restart_frame); 
+                ids.push_back(num); 
                 num++;      
             }
         
