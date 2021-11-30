@@ -4,7 +4,7 @@
  * @Author: Lonya Peng
  * @Date: 2021-10-14 15:05:01
  * @LastEditors: Lonya Peng
- * @LastEditTime: 2021-11-08 17:46:04
+ * @LastEditTime: 2021-11-24 14:48:39
  */
 #include "parameters.h"
 
@@ -27,6 +27,7 @@ int FOCAL_LENGTH;
 int FISHEYE;
 bool PUB_THIS_FRAME;
 bool KLT_STATUS;
+bool EKLT_FLAG;
 
 template <typename T>
 T readParam(ros::NodeHandle &n, std::string name)
@@ -70,11 +71,13 @@ void readParameters(ros::NodeHandle &n)
         FISHEYE_MASK = VINS_FOLDER_PATH + "config/fisheye_mask.jpg";
     CAM_NAMES.push_back(config_file);
 
-    WINDOW_SIZE = 1;
+    WINDOW_SIZE = 20;
     STEREO_TRACK = false;
     FOCAL_LENGTH = 460;
     PUB_THIS_FRAME = false;
     KLT_STATUS = true;
+    EKLT_FLAG = false;
+    
 
     if (FREQ == 0)
         FREQ = 100;

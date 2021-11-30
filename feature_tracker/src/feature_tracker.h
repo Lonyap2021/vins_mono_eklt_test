@@ -4,7 +4,6 @@
  * @Author: Lonya Peng
  * @Date: 2021-10-15 15:41:21
  * @LastEditors: Lonya Peng
- * @LastEditTime: 2021-10-29 16:15:31
  */
 #pragma once
 
@@ -23,6 +22,9 @@
 
 #include "parameters.h"
 #include "tic_toc.h"
+#include <nav_msgs/Path.h>
+#include <nav_msgs/Odometry.h>
+#include <geometry_msgs/PointStamped.h>
 
 // #include "/home/ply/vins-mono/src/VINS-Mono/vins_estimator/src/estimator.h"
 
@@ -52,7 +54,8 @@ class FeatureTracker
     void readImageDense(const cv::Mat &_img,double _cur_time);
     
     void readImageDense_test(const cv::Mat &_img,double _cur_time);
-
+    void readImageDenseKeyPoint_test(const cv::Mat &_img,double _cur_time);
+    
     void setMask();
 
     void addPoints();
@@ -64,6 +67,9 @@ class FeatureTracker
     void readIntrinsicParameter(const string &calib_file);
 
     void showUndistortion(const string &name);
+    
+    bool relativePose(Matrix3d &relative_R, Vector3d &relative_T) ;
+    bool getRT();
 
     void rejectWithF();
 
@@ -90,4 +96,6 @@ class FeatureTracker
     double cur_time;
     double prev_time;
     static int n_id;//用来作为特征点id，每检测到一个新的特征点，就将n_id作为该特征点的id，然后n_id加1
+
+    Vector3d Pst;
 };

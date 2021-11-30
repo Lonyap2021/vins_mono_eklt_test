@@ -281,7 +281,6 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
         }
 
     }
-    std::cout << "Ps:"<<Ps[0]<<std::endl;  
 }
 
 void FeatureManager::removeOutlier()

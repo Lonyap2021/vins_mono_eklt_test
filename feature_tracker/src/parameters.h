@@ -4,7 +4,7 @@
  * @Author: Lonya Peng
  * @Date: 2021-10-15 15:41:48
  * @LastEditors: Lonya Peng
- * @LastEditTime: 2021-11-08 17:46:10
+ * @LastEditTime: 2021-11-24 14:48:20
  */
 #pragma once
 #include <ros/ros.h>
@@ -36,6 +36,8 @@ extern int EQUALIZE;//1  if image is too dark or light, trun on equalize to find
 extern int FISHEYE;//0 if using fisheye, trun on it. A circle mask will be loaded to remove edge noisy points
 extern bool PUB_THIS_FRAME;
 extern bool KLT_STATUS;
+extern bool EKLT_FLAG;
+
 
 void readParameters(ros::NodeHandle &n);
 

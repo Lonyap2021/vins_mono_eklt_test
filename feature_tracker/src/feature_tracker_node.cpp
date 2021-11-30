@@ -18,6 +18,10 @@ queue<sensor_msgs::ImageConstPtr> img_buf;
 
 ros::Publisher pub_img,pub_match;
 ros::Publisher pub_restart;
+nav_msgs::Path path_test;
+ros::Publisher pub_camera_pose_test;
+ros::Publisher pub_key_poses_test;
+ros::Publisher pub_eklt_status;
 
 FeatureTracker trackerData[NUM_OF_CAM];
 double first_image_time;
@@ -26,6 +30,7 @@ bool first_image_flag = true;
 double last_image_time = 0;
 bool init_pub = 0;
 int save_img = 0;
+
 
 int frame_flag=0;
 
@@ -37,8 +42,11 @@ void klt_status_callback(const std_msgs::Int32 &status_msg)
         KLT_STATUS = 0;
 }
 
+
+
+
 void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
-{
+{ 
     if(first_image_flag)
     {
         first_image_flag = false;
@@ -90,12 +98,18 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     else
         ptr = cv_bridge::toCvCopy(img_msg, sensor_msgs::image_encodings::MONO8);
 
+
     cv::Mat show_img = ptr->image;
     TicToc t_r;
 
+    std_msgs::Bool eklt_flag;
+    eklt_flag.data = EKLT_FLAG;
+    pub_eklt_status.publish(eklt_flag);
+    
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
         ROS_DEBUG("processing camera %d", i);
+        cout << ptr->image.cols << " "<<COL<<endl;
         if (i != 1 || !STEREO_TRACK){
             if(ptr->image.cols!=COL ||ptr->image.rows!=ROW)
                 return;
@@ -125,6 +139,8 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         if (!completed)
             break;
     }
+
+   
    
    if (PUB_THIS_FRAME)
    {
@@ -184,6 +200,31 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         else
             pub_img.publish(feature_points);
 
+        
+        Vector3d correct_pose;
+        correct_pose = trackerData[0].Pst;
+        geometry_msgs::PoseStamped pose_stamped;
+        path_test.header = img_msg->header;
+        path_test.header.frame_id = "world";
+        pose_stamped.pose.position.x = correct_pose.x();
+        pose_stamped.pose.position.y = correct_pose.y();
+        pose_stamped.pose.position.z = correct_pose.z();
+
+        pose_stamped.header.frame_id="world";
+        pose_stamped.header.stamp = img_msg->header.stamp;
+        path_test.poses.push_back(pose_stamped);
+    
+        pub_key_poses_test.publish(path_test);
+
+        nav_msgs::Odometry odometry;
+        odometry.header = img_msg->header;
+        odometry.header.frame_id = "world";
+        odometry.child_frame_id = "world";
+        odometry.pose.pose = pose_stamped.pose;
+        pub_camera_pose_test.publish(odometry);
+        // ROS_DEBUG("publish odom");
+   
+
         if (SHOW_TRACK)
         {
             ptr = cv_bridge::cvtColor(ptr, sensor_msgs::image_encodings::BGR8);
@@ -216,8 +257,8 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                 }
             }
             //cv::imshow("vis", stereo_img);
-            std::string img_str = "/home/ply/vins-mono/src/image/";
-            cv::imwrite(img_str+to_string(save_img)+".png",stereo_img);
+            // std::string img_str = "/home/ply/vins-mono/src/image/";
+            // cv::imwrite(img_str+to_string(save_img)+".png",stereo_img);
             //cv::waitKey(5);
             pub_match.publish(ptr->toImageMsg());
         }
@@ -229,8 +270,8 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "feature_tracker");
     ros::NodeHandle n("~");
-    ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
-    // ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
+    // ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
+    ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
     
     readParameters(n);
 
@@ -251,15 +292,24 @@ int main(int argc, char **argv)
                 ROS_INFO("load mask success");
         }
     }
+    std::string img_str = "/home/ply/vins-mono/src/image_klt/";
+    ros::Time now_time = ros::Time::now();
+            
+    // for(int i = 1;i<10;i++){
+    //     cv::Mat img = cv::imread(img_str+to_string(i)+".png",-1);
+    //     trackerData[0].readImage(img, now_time.toSec());
+    // }
 
     ros::Subscriber sub_img = n.subscribe(IMAGE_TOPIC, 100, img_callback);
-
     ros::Subscriber sub_status = n.subscribe("/vins_estimator/status",100,klt_status_callback);
 
     pub_img = n.advertise<sensor_msgs::PointCloud>("feature", 1000);
     pub_match = n.advertise<sensor_msgs::Image>("feature_img",1000);
     pub_restart = n.advertise<std_msgs::Bool>("restart",1000);
+    pub_key_poses_test = n.advertise<nav_msgs::Path>("key_poses_test",1, true);
+    pub_camera_pose_test = n.advertise<nav_msgs::Odometry>("camera_pose_test",1, true);
 
+    pub_eklt_status = n.advertise<std_msgs::Bool>("eklt_status",1000);
 
     
     /*

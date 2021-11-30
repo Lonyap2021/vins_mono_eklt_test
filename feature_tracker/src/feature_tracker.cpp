@@ -6,8 +6,12 @@ int FeatureTracker::n_id = 0;
 
 extern int KLT;
 
+
+ofstream out("/home/ply/vins-mono/src/test.txt");
+int keyF = 0;
+
 std::vector<cv::Point2f> keyPoints;
-int step = 30;
+int step = 1;
 
 //判断pt是否在图像内
 bool inBorder(const cv::Point2f &pt)
@@ -110,7 +114,8 @@ int size_dense = 0;
 
 void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 {
-    KLT_STATUS = 0;
+    KLT_STATUS=1;
+    keyF++;
     if(KLT_STATUS){
         ROS_INFO("KLT_STATUS:%d",KLT_STATUS);
         readImageKlt(_img,_cur_time);
@@ -220,6 +225,17 @@ void FeatureTracker::readImageKlt(const cv::Mat &_img, double _cur_time)
         addPoints();
         ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
     } 
+
+    // if (cur_pts.size() > 0)
+    //     getRT();
+   
+    if(cur_pts.size()<30){
+        EKLT_FLAG = true;
+        // PUB_THIS_FRAME = false;
+    }else{
+        EKLT_FLAG = false;
+        // PUB_THIS_FRAME = true;
+    }
     
     prev_img = cur_img;
     prev_pts = cur_pts;
@@ -393,6 +409,7 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         ids.clear();
         int num = 0;
         int start_row = ROW/2;
+        // int start_row = 0;
         for(int y=start_row;y<_img.rows;y+=step)
             for(int x = 0;x<_img.cols;x+=step)
             {
@@ -490,6 +507,9 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
         //     addPointsDense();
         // }
     }
+
+    // if (isnotFirstFram)
+    //     // getRT();
     
     prev_img = cur_img;
     prev_pts = cur_pts;
@@ -503,7 +523,7 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
     if(isnotFirstFram>1){
         keyPoints.clear();
         keyPoints = forw_pts;
-        if(ids.size()<20){
+        if(ids.size()<30){
             keyPoints.clear();
             isnotFirstFram = 0;
             restart_frame++;
@@ -512,6 +532,187 @@ void FeatureTracker::readImageDense_test(const cv::Mat &_img, double _cur_time)
 
     
 }
+
+void FeatureTracker::readImageDenseKeyPoint_test(const cv::Mat &_img, double _cur_time)
+{
+    cv::Mat img;
+    TicToc t_r;
+    cur_time = _cur_time;
+   
+   //若控制参数 EQUALIZE 为真,则调用 cv::creatCLAHE()对输入图像做自适应直方图均衡
+    if (EQUALIZE)
+    {
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
+        TicToc t_c;
+        clahe->apply(_img, img);
+        ROS_DEBUG("CLAHE costs: %fms", t_c.toc());
+    }
+    else
+        img = _img;
+
+    if(keyPoints.size()==0) {
+        for(int i = 0;i<cur_pts.size();i++){
+            keyPoints.push_back(cur_pts[i]);
+        }
+    }
+
+    if (forw_img.empty())
+    {
+        prev_img = cur_img = forw_img = img;
+        //稀疏光流选择的五个点，给到稠密光流，进行追踪
+        // keyPoints.push_back(cv::Point(315.590668,356.079071));
+        // keyPoints.push_back(cv::Point(210.187225,432.795380));
+        // keyPoints.push_back(cv::Point(176.280899,402.470978));
+        // keyPoints.push_back(cv::Point(379.619476,55.647018));
+        // keyPoints.push_back(cv::Point(515.059937,200.531921)); 
+    }
+    else
+    {
+        forw_img = img;
+        isnotFirstFram = 1;
+    }
+    //两个作用：1.在光流检测中存储跟踪到的点,2.在goodFeaturetotrack里存储检测到的角点
+    //为了不使两者之间数据混乱，每次在进行1,2步时都要进行清空，goodFeaturetotrack里的forw_pts是在mask里清空的
+    forw_pts.clear();
+    track_cnt.clear();
+    cur_un_pts.clear();
+    cur_pts.clear();
+    
+    if(isnotFirstFram){
+        isnotFirstFram++;
+        cv::calcOpticalFlowFarneback(cur_img, forw_img, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
+        cv::cvtColor(cur_img, cflow, cv::COLOR_GRAY2BGR);
+        int step = 1;
+        cv::Scalar color = cv::Scalar(0, 255, 0);
+        vector<uchar> status;
+        status.clear();
+    
+        for(int i =0;i<keyPoints.size();i++){
+            int y = keyPoints[i].y;
+            int x = keyPoints[i].x;
+            const cv::Point2f& fxy = flow.at<cv::Point2f>(y, x);
+            cur_pts.push_back(cv::Point(x, y));
+            forw_pts.push_back(cv::Point(cvRound(x + fxy.x), cvRound(y + fxy.y)));
+            status.push_back(1);
+            track_cnt.push_back(2);
+        } 
+        
+        ROS_DEBUG("cur_pts flow size is %d\n",cur_pts.size());
+        // ROS_DEBUG("forw_pts flow size is %d\n",forw_pts.size());
+        // ROS_INFO("status size is %d",status.size());
+        //判断跟踪的光流点，是否在图像内，跟踪的特征点在图像外状态数组内设为0
+        for (int i = 0; i < int(forw_pts.size()); i++)
+            if (status[i] && !inBorder(forw_pts[i]))
+                status[i] = 0;
+        //将光流跟踪后的点的集合，根据跟踪的状态(status)进行重组
+        reduceVector(prev_pts, status);
+        reduceVector(cur_pts, status);
+        reduceVector(forw_pts, status);
+        //将光流跟踪后的点的id和跟踪次数，根据跟踪的状态(status)进行重组
+        reduceVector(ids, status);
+        // ROS_INFO("ids size is %d",ids.size());
+        reduceVector(cur_un_pts, status);
+        reduceVector(track_cnt, status);
+    }
+
+    //将track_cnt中的每个数进行加一处理，代表又跟踪了一次
+    for (auto &n : track_cnt)
+        n++;
+    if (PUB_THIS_FRAME)
+    {
+        // rejectWithF();
+        ROS_DEBUG("set mask begins");
+        TicToc t_m;
+        // setMask();
+        // ROS_DEBUG("set mask costs %fms", t_m.toc());
+        // ROS_DEBUG("detect feature begins");
+        // TicToc t_t;
+        
+        // //光流跟踪新增加的检测角点个数
+        // int n_max_cnt = size_dense - static_cast<int>(forw_pts.size());  
+        // if (n_max_cnt > 0)
+        // {
+        //     addPointsDense();
+        // }
+    }
+    
+    prev_img = cur_img;
+    prev_pts = cur_pts;
+    prev_un_pts = cur_un_pts;
+    cur_img = forw_img;
+    cur_pts = forw_pts;
+    undistortedPoints();
+    prev_time = cur_time;
+    prev_klt_status=KLT_STATUS;
+    if(isnotFirstFram>1){
+        keyPoints.clear();
+        keyPoints = forw_pts;
+    }
+    
+}
+
+Vector3d Pref={0,0,0};
+
+bool FeatureTracker::getRT(){
+
+    Matrix3d relative_R;//定义容器
+    Vector3d relative_T;
+
+    if(!relativePose(relative_R, relative_T)){
+        ROS_INFO("Not enough features or parallax; Move device around");
+        return false;
+    }
+
+    Vector3d Pcur = relative_R * Pref+relative_T;
+    Pref = Pcur;
+    Pst = Pcur;
+    std::cout<<"keyF"<<keyF<<endl;
+    cout << relative_R<<endl;
+    cout << relative_T<<endl;
+
+    if(out.is_open()){
+        out<<keyF<<"    "<<Pcur[0]<<"    "<<Pcur[1]<<"    "<<Pcur[2]<<endl;
+    }
+    return true;
+
+}
+
+bool FeatureTracker::relativePose(Matrix3d &relative_R, Vector3d &relative_T) //output array R,t
+{
+    if (ids.size() >= 15)
+    {
+        vector<cv::Point2f> ll, rr;
+        for (int i = 0; i < int(ids.size()); i++)
+        {
+            ll.push_back(cv::Point2f(cur_pts[i].x, cur_pts[i].y));
+            rr.push_back(cv::Point2f(forw_pts[i].x, forw_pts[i].y));
+        }
+        cv::Mat mask;
+        //因为这里的ll,rr是归一化坐标，所以得到的是本质矩阵
+        cv::Mat E = cv::findFundamentalMat(ll, rr, cv::FM_RANSAC, 0.3 / 460, 0.99, mask);
+        cv::Mat cameraMatrix = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
+        cv::Mat rot, trans;
+        int inlier_cnt = cv::recoverPose(E, ll, rr, cameraMatrix, rot, trans, mask);
+        //cout << "inlier_cnt " << inlier_cnt << endl;
+
+        Eigen::Matrix3d R;
+        Eigen::Vector3d T;
+        for (int i = 0; i < 3; i++)
+        {   
+            T(i) = trans.at<double>(i, 0);
+            for (int j = 0; j < 3; j++)
+                R(i, j) = rot.at<double>(i, j);
+        }
+
+        relative_R = R.transpose();
+        relative_T = -R.transpose() * T;
+        return true;
+    }
+    return false;
+
+    
+}
+
 
 //对图像使用光流法进行特征点跟踪
 void FeatureTracker::readImage1(const cv::Mat &_img, double _cur_time)

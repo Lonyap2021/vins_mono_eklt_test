@@ -7,6 +7,7 @@ ros::Publisher pub_path, pub_relo_path;
 ros::Publisher pub_point_cloud, pub_margin_cloud;
 ros::Publisher pub_key_poses;
 ros::Publisher pub_key_poses_test;
+ros::Publisher pub_camera_pose_test;
 ros::Publisher pub_relo_relative_pose;
 ros::Publisher pub_camera_pose;
 ros::Publisher pub_camera_pose_visual;
@@ -34,6 +35,7 @@ void registerPub(ros::NodeHandle &n)
     pub_margin_cloud = n.advertise<sensor_msgs::PointCloud>("history_cloud", 1000);
     pub_key_poses = n.advertise<visualization_msgs::Marker>("key_poses", 1000);
     pub_key_poses_test = n.advertise<nav_msgs::Path>("key_poses_test",1, true);
+    pub_camera_pose_test = n.advertise<nav_msgs::Odometry>("camera_pose_test",1, true);
     pub_camera_pose = n.advertise<nav_msgs::Odometry>("camera_pose", 1000);
     pub_camera_pose_visual = n.advertise<visualization_msgs::MarkerArray>("camera_pose_visual", 1000);
     pub_keyframe_pose = n.advertise<nav_msgs::Odometry>("keyframe_pose", 1000);
@@ -243,6 +245,13 @@ void pubKeyPosesTest(const Estimator &estimator, const std_msgs::Header &header)
     path_test.poses.push_back(pose_stamped);
  
     pub_key_poses_test.publish(path_test);
+
+    nav_msgs::Odometry odometry;
+    odometry.header = header;
+    odometry.header.frame_id = "world";
+    odometry.child_frame_id = "world";
+    odometry.pose.pose = pose_stamped.pose;
+    pub_camera_pose_test.publish(odometry);
    
 }
 

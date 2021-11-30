@@ -131,7 +131,7 @@ void Estimator::processImageTest(const map<int, vector<pair<int, Eigen::Matrix<d
     keyF++;
     if (frame_count != 0)
     {
-        test();
+        // test();
     }
 
 
@@ -159,6 +159,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
 
     keyF++;
+    
     if (frame_count != 0)  
         test();
 
@@ -179,7 +180,14 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             }
         }
     }
-    // solver_flag = NON_LINEAR;
+
+    // if(frame_count != WINDOW_SIZE){
+    //     frame_count++;
+    // }else{
+    //     slideWindow();
+    // }
+    
+
     //进行初始化,  一般初始化只进行一次；
     if (solver_flag == INITIAL)
     {        //frame_count是滑动窗口中图像帧的数量，一开始初始化为0，滑动窗口总帧数WINDOW_SIZE=10
@@ -247,28 +255,34 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         last_R0 = Rs[0];
         last_P0 = Ps[0];
     }
+
 }
 
 
-Vector3d Pref={0,0,1};
+Vector3d Pref={0,0,0};
 
 bool Estimator::test(){
 
     Matrix3d relative_R;//定义容器
     Vector3d relative_T;
     
+    marginalization_flag = MARGIN_SECOND_NEW;
+
     if (!relativePose(relative_R, relative_T))
     {
         ROS_INFO("Not enough features or parallax; Move device around");
         return false;
     }
-    
+    marginalization_flag = MARGIN_OLD;
     Vector3d Pcur = relative_R * Pref+relative_T;
     Pref = Pcur;
     Pst = Pcur;
-    std::cout<<keyF<<"    "<<Pcur[0]<<" "<<Pcur[1]<<endl;
+    std::cout<<"keyF"<<keyF<<endl;
+    cout << relative_R<<endl;
+    cout << relative_T<<endl;
+
     if(out.is_open()){
-        out<<keyF<<"    "<<Pcur[0]<<" "<<Pcur[1]<<endl;
+        out<<keyF<<"    "<<Pcur[0]<<"    "<<Pcur[1]<<"    "<<Pcur[2]<<endl;
     }
     return true;
 }
@@ -582,8 +596,8 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T) //outpu
     
     // corres = f_manager.getCorresponding(keyF-1, keyF);//寻找对应特征点归一化坐标//归一化坐标point(x,y,不需要z)
     corres = f_manager.getCorresponding(frame_count - 1, frame_count);
-    cout << "corres.size()"<<corres.size()<<endl;
-    if (corres.size() > 5)
+    // cout << "corres.size()"<<corres.size()<<endl;
+    if (corres.size() > 15)
     {
         double sum_parallax = 0;
         double average_parallax;//计算平均视差
@@ -616,7 +630,7 @@ void Estimator::solveOdometry()
     {
         TicToc t_tri;
         f_manager.triangulate(Ps, tic, ric);// 三角化一些特征点，确保f_manager中的所有特征点都有一个深度值
-        // optimization();// 滑动窗口紧耦合优化
+        optimization();// 滑动窗口紧耦合优化
     }
 }
 
