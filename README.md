@@ -160,3 +160,11 @@ The source code is released under [GPLv3](http://www.gnu.org/licenses/) license.
 We are still working on improving the code reliability. For any technical issues, please contact Tong QIN <tong.qinATconnect.ust.hk> or Peiliang LI <pliapATconnect.ust.hk>.
 
 For commercial inquiries, please contact Shaojie SHEN <eeshaojieATust.hk>
+
+## 我们自己的代码测试
+
+```
+    roslaunch vins_estimator eklt.launch
+    rosbag play YOUR_PATH_TO_DATASET/boxes_6dof.bag
+
+```
